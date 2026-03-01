@@ -253,9 +253,11 @@ const SoundManager = (() => {
 // ---------------------------------------------------------------------------
 const SpriteLoader = (() => {
   const PATHS = {
-    hogman_idle:  'assets/sprites/hogman/hogman_idle.png',
-    hogman_run:   'assets/sprites/hogman/hogman_run.png',
-    hogman_death: 'assets/sprites/hogman/hogman_death.png',
+    hogman_idle:       'assets/sprites/hogman/hogman_idle.png',
+    hogman_run:        'assets/sprites/hogman/hogman_run.png',
+    hogman_death:      'assets/sprites/hogman/hogman_death.png',
+    hogman_charge_gas:      'assets/sprites/hogman/hog_charge_gas.png',
+    hogman_charge_gas_jump: 'assets/sprites/hogman/hog_charge_gas_jump.png',
     gollum_idle:      'assets/sprites/gollum/gollum_idle.png',
     gollum_run:       'assets/sprites/gollum/gollum_crawling.png',
     gollum_jump:      'assets/sprites/gollum/gollum_jump.png',
@@ -446,34 +448,6 @@ function drawSplash() {
   if (SpriteLoader.ready('splash_screen')) {
     // Canvas is already sized 2:3 to match the image — fill it directly
     SpriteLoader.blit('splash_screen', 0, 0, W, H);
-  } else {
-    // Procedural fallback while image loads (or if file is missing)
-    drawParchmentBg();
-    drawGoldenBorder(W, H);
-
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = '#8B0000';
-    ctx.font = 'bold 64px "UnifrakturMaguntia", serif';
-    ctx.fillText('The Noble Hog Saga', W / 2, 175);
-    ctx.shadowBlur = 30;
-    ctx.shadowColor = 'rgba(180,0,0,0.4)';
-    ctx.fillStyle = '#a80000';
-    ctx.fillText('The Noble Hog Saga', W / 2, 175);
-    ctx.restore();
-
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'italic 22px "UnifrakturMaguntia", serif';
-    ctx.fillStyle = '#c9a84c';
-    ctx.shadowColor = 'rgba(201,168,76,0.5)';
-    ctx.shadowBlur = 10;
-    ctx.fillText('A Sacred Chronicle', W / 2, 250);
-    ctx.restore();
   }
 
   // Pulsing pixel-art prompt — drawn over the image (or fallback) every frame
@@ -911,7 +885,7 @@ function initLevel(level = 1) {
       {x: 0, y: 420, width: LEVEL_WIDTH, height: 80, type: 'ground'},
 
       // ── ELEVATED PLATFORMS (wood plank, spread across full level) ─────────
-      {x:  520, y: 310, width:  280, height: 32, type: 'platform'},
+      {x:  520, y: 290, width:  280, height: 32, type: 'platform'},
       {x: 1150, y: 265, width:  300, height: 32, type: 'platform'},
       {x: 1780, y: 300, width:  280, height: 32, type: 'platform'},
       {x: 2300, y: 275, width:  320, height: 32, type: 'platform'},
@@ -937,7 +911,7 @@ function initLevel(level = 1) {
       {x: 1200, y: 400, type: 'burger',  collected: false},
       {x: 1650, y: 400, type: 'burger',  collected: false},
       // ── Tacos — one per platform, centred on surface ─────────────────────
-      {x:  660, y: 288, type: 'taco',    collected: false}, // plat 1
+      {x:  660, y: 268, type: 'taco',    collected: false}, // plat 1
       {x: 1300, y: 243, type: 'taco',    collected: false}, // plat 2
       {x: 1920, y: 278, type: 'taco',    collected: false}, // plat 3
       {x: 2460, y: 253, type: 'taco',    collected: false}, // plat 4
@@ -1291,37 +1265,51 @@ function drawPlayerInGame() {
 
 // Hogman: hog mount + rider body + head + hat
 function drawHogmanInGame(x, y, w, h) {
-  // Speed-lines trailing behind the hog during a charge
+  // Gas cloud during a charge — sprite if loaded, green lines as fallback
   if (player && player.sliding) {
-    ctx.save();
-    ctx.globalAlpha = 0.65;
-    ctx.strokeStyle = '#77dd11';
-    ctx.lineCap = 'round';
-    if (player.chargeUp) {
-      // Downward trails for upward boost
-      for (let i = 0; i < 5; i++) {
-        const lx  = x + w * (0.15 + i * 0.175);
-        const len = 14 + i * 11;
-        ctx.lineWidth = 2.5 - i * 0.35;
-        ctx.beginPath();
-        ctx.moveTo(lx, y + h);
-        ctx.lineTo(lx, y + h + len);
-        ctx.stroke();
+    if (SpriteLoader.ready('hogman_charge_gas')) {
+      const sz2    = SpriteLoader.size('hogman_charge_gas');
+      const cloudH = h * 1.7;
+      const cloudW = sz2 ? (sz2.w / sz2.h) * cloudH : cloudH;
+      if (player.chargeUp) {
+        // Dedicated jump asset — wider, shorter than the horizontal cloud
+        const jumpW = cloudW * 1.5;
+        const jumpH = cloudH * 0.65;
+        SpriteLoader.blit('hogman_charge_gas_jump', x + w / 2 - jumpW / 2, y + h, jumpW, jumpH);
+      } else {
+        // Trailing behind, nested closer — parent ctx handles the facing flip
+        SpriteLoader.blit('hogman_charge_gas', x - cloudW + w * 0.45, y + h / 2 - cloudH / 2, cloudW, cloudH);
       }
     } else {
-      // Horizontal trails for forward charge
-      const backEdge = player.facing === 1 ? x : x + w;
-      for (let i = 0; i < 5; i++) {
-        const ly  = y + h * (0.22 + i * 0.13);
-        const len = 16 + i * 14;
-        ctx.lineWidth = 2.5 - i * 0.35;
-        ctx.beginPath();
-        ctx.moveTo(backEdge, ly);
-        ctx.lineTo(backEdge - player.facing * len, ly);
-        ctx.stroke();
+      // Fallback: green lines
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.strokeStyle = '#77dd11';
+      ctx.lineCap = 'round';
+      if (player.chargeUp) {
+        for (let i = 0; i < 5; i++) {
+          const lx  = x + w * (0.15 + i * 0.175);
+          const len = 14 + i * 11;
+          ctx.lineWidth = 2.5 - i * 0.35;
+          ctx.beginPath();
+          ctx.moveTo(lx, y + h);
+          ctx.lineTo(lx, y + h + len);
+          ctx.stroke();
+        }
+      } else {
+        const backEdge = player.facing === 1 ? x : x + w;
+        for (let i = 0; i < 5; i++) {
+          const ly  = y + h * (0.22 + i * 0.13);
+          const len = 16 + i * 14;
+          ctx.lineWidth = 2.5 - i * 0.35;
+          ctx.beginPath();
+          ctx.moveTo(backEdge, ly);
+          ctx.lineTo(backEdge - player.facing * len, ly);
+          ctx.stroke();
+        }
       }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   const sprKey = (player && player.dying) ? 'hogman_death'
