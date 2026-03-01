@@ -142,6 +142,23 @@ const SoundManager = (() => {
       } catch(e) {}
     },
 
+    // Short bass whoosh — Hogman launches a charge
+    playCharge() {
+      const ac = getCtx(); if (!ac) return;
+      try {
+        const osc  = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sawtooth';
+        const t = ac.currentTime;
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.exponentialRampToValueAtTime(55, t + 0.28);
+        gain.gain.setValueAtTime(0.38, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+        osc.start(t); osc.stop(t + 0.32);
+      } catch(e) {}
+    },
+
     // Magical shimmering chord — magic lamp collected
     playLampGet() {
       const notes = [523, 659, 784, 1047, 1319]; // C5 E5 G5 C6 E6
@@ -829,7 +846,7 @@ function initLevel(level = 1) {
     dying:           false, // death crumple animation active
     deathRestTimer:  0,    // seconds to rest on ground before game over
     speed:      isHogman ? 3   : 4.5,
-    jumpForce:  isHogman ? 12  : 8,
+    jumpForce:  isHogman ? 6 : 8,
     facing:     1,  // 1 = right, -1 = left
     coyoteFrames: 0, // frames remaining after walking off a ledge where jump is still allowed
     // Variable jump
@@ -842,6 +859,8 @@ function initLevel(level = 1) {
     sliding:      false,
     slideTimer:   0,
     slideVx:         0,
+    chargeFuel:      0,   // 0.0–1.0 gauge filled by collectibles; Hogman charges at 1.0
+    chargeUp:        false, // true when the active charge is an upward boost
     doubleJumpFlash: 0,   // seconds remaining of double-jump burst (Gollum only)
     prevBottom:      GROUND_Y, // actual bottom-edge last frame; tracked to fix height-change collision misses
     // Collectible counts toward extra life thresholds
@@ -1009,45 +1028,71 @@ function updatePlayer() {
 
   // --- Boost multipliers from active power-ups ---
 
-  // --- Crouch / Slide ---
+  // --- Hogman Charge / Gollum Crouch+Slide ---
   const isHogman = gameState.selectedCharacter === 'hogman';
-  const slideDur = isHogman ? 0.42 : 0.30;
 
-  if (player.sliding) {
-    player.slideTimer -= 1 / 60;
-    player.slideVx   *= 0.88;
-    player.vx         = player.slideVx;
-    player.height     = player.crouchHeight;
-    if (player.slideTimer <= 0) {
-      player.sliding = false;
-      // Stay crouched if Down still held, else stand
-      player.crouching = keys['ArrowDown'];
-      if (!player.crouching) player.height = player.normalHeight;
+  if (isHogman) {
+    // F key launches a charge; direction set by held inputs at moment of press
+    if (player.sliding) {
+      player.slideTimer -= 1 / 60;
+      if (!player.chargeUp) player.vx = player.slideVx; // horizontal: hold speed constant
+      if (player.slideTimer <= 0) {
+        player.sliding  = false;
+        player.chargeUp = false;
+      }
+    } else {
+      if (justPressed['KeyF'] && player.chargeFuel > 0) {
+        const fuel        = player.chargeFuel;
+        player.chargeFuel = 0;
+        player.sliding    = true;
+        player.slideTimer = Math.max(0.15, 0.45 * fuel); // duration scales with fuel
+        if (keys['ArrowUp']) {
+          player.chargeUp = true;
+          player.vy       = -(player.speed * 3.5); // strong upward burst
+          player.slideVx  = player.facing * player.speed * 0.8; // slight horizontal carry
+        } else {
+          player.chargeUp = false;
+          player.slideVx  = player.facing * player.speed * 3.5; // strong horizontal
+        }
+        SoundManager.playCharge();
+      }
     }
-  } else if (player.isOnGround && !player.sliding) {
-    const wantCrouch = keys['ArrowDown'];
-    const wasRunning = Math.abs(player.vx) > player.speed * 0.5;
-    if (justPressed['ArrowDown'] && wasRunning) {
-      // Trigger slide
-      player.sliding    = true;
-      player.slideTimer = slideDur;
-      player.slideVx    = player.vx * 1.3;
-      player.crouching  = false;
+  } else {
+    // Gollum: crouch (hold Down) + slide (Down while running)
+    if (player.sliding) {
+      player.slideTimer -= 1 / 60;
+      player.slideVx   *= 0.88;
+      player.vx         = player.slideVx;
       player.height     = player.crouchHeight;
-    } else if (wantCrouch && !player.crouching) {
-      player.crouching = true;
-      player.y        += player.normalHeight - player.crouchHeight; // keep feet planted
-      player.height    = player.crouchHeight;
-    } else if (!wantCrouch && player.crouching) {
-      player.crouching = false;
-      player.y        -= player.normalHeight - player.crouchHeight;
-      player.height    = player.normalHeight;
+      if (player.slideTimer <= 0) {
+        player.sliding   = false;
+        player.crouching = keys['ArrowDown'];
+        if (!player.crouching) player.height = player.normalHeight;
+      }
+    } else if (player.isOnGround) {
+      const wantCrouch = keys['ArrowDown'];
+      const wasRunning = Math.abs(player.vx) > player.speed * 0.5;
+      if (justPressed['ArrowDown'] && wasRunning) {
+        player.sliding    = true;
+        player.slideTimer = 0.30;
+        player.slideVx    = player.vx * 1.3;
+        player.crouching  = false;
+        player.height     = player.crouchHeight;
+      } else if (wantCrouch && !player.crouching) {
+        player.crouching = true;
+        player.y        += player.normalHeight - player.crouchHeight; // keep feet planted
+        player.height    = player.crouchHeight;
+      } else if (!wantCrouch && player.crouching) {
+        player.crouching = false;
+        player.y        -= player.normalHeight - player.crouchHeight;
+        player.height    = player.normalHeight;
+      }
     }
   }
 
   // --- Horizontal input (inertia) ---
   // vx lerps toward the target speed; separate rates for accelerating vs stopping
-  const maxVx = player.crouching ? player.speed * 0.35 : player.speed;
+  const maxVx = (!isHogman && player.crouching) ? player.speed * 0.35 : player.speed;
   let targetVx = 0;
   if (!player.sliding) {
     if (keys['ArrowLeft'])  { targetVx = -maxVx; player.facing = -1; }
@@ -1246,19 +1291,52 @@ function drawPlayerInGame() {
 
 // Hogman: hog mount + rider body + head + hat
 function drawHogmanInGame(x, y, w, h) {
+  // Speed-lines trailing behind the hog during a charge
+  if (player && player.sliding) {
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+    ctx.strokeStyle = '#77dd11';
+    ctx.lineCap = 'round';
+    if (player.chargeUp) {
+      // Downward trails for upward boost
+      for (let i = 0; i < 5; i++) {
+        const lx  = x + w * (0.15 + i * 0.175);
+        const len = 14 + i * 11;
+        ctx.lineWidth = 2.5 - i * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(lx, y + h);
+        ctx.lineTo(lx, y + h + len);
+        ctx.stroke();
+      }
+    } else {
+      // Horizontal trails for forward charge
+      const backEdge = player.facing === 1 ? x : x + w;
+      for (let i = 0; i < 5; i++) {
+        const ly  = y + h * (0.22 + i * 0.13);
+        const len = 16 + i * 14;
+        ctx.lineWidth = 2.5 - i * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(backEdge, ly);
+        ctx.lineTo(backEdge - player.facing * len, ly);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   const sprKey = (player && player.dying) ? 'hogman_death'
                : (player && Math.abs(player.vx) > 0.1) ? 'hogman_run' : 'hogman_idle';
   const sz = SpriteLoader.size(sprKey);
   if (sz) {
     let drawW, drawH, drawY;
     if (sprKey === 'hogman_idle') {
-      // Idle: scale to hitbox height, left-aligned
-      drawH = h;
+      // Idle: scale up to match run sprite visual size, feet kept at same ground position
+      drawH = h * 1.3;
       drawW = (sz.w / sz.h) * drawH;
-      drawY = y + 18;
+      drawY = y + h + 18 - drawH; // anchor bottom — sprite grows upward
     } else {
       // Run: contain-fit scaled up, bottom-aligned
-      const scale = Math.min(w / sz.w, h / sz.h) * 1.35;
+      const scale = Math.min(w / sz.w, h / sz.h) * 1.55;
       drawW = sz.w * scale;
       drawH = sz.h * scale;
       drawY = y + h - drawH + 32;
@@ -1441,13 +1519,13 @@ function checkEnemyCollisions() {
       player.vy          = -7;  // bounce
       camera.shakeFrames = 12;
       SoundManager.playDefeat();
-    } else if (player.sliding) {
-      // Hogman charge-kill — slide destroys enemy, no damage to player
+    } else if (player.sliding && gameState.selectedCharacter === 'hogman') {
+      // Hogman charge — destroys enemy on contact, no damage to player
       e.alive            = false;
       camera.shakeFrames = 8;
       SoundManager.playDefeat();
-    } else if (gameState.selectedCharacter === 'gollum' && player.crouching) {
-      // Gollum sneak — crouching squeezes past, enemy unaware
+    } else if (gameState.selectedCharacter === 'gollum' && (player.crouching || player.sliding)) {
+      // Gollum sneak — crouching or sliding squeezes past, enemy unaware
     } else if (player.invincibleTimer <= 0 && player.ringTimer <= 0) {
       // Side/head-on hit — lose a life
       player.lives--;
@@ -1685,6 +1763,22 @@ function checkBossCollision() {
     } else {
       player.vy = -7; // bounce off — not vulnerable right now
     }
+  } else if (player.sliding && gameState.selectedCharacter === 'hogman') {
+    // Hogman charge — damages boss if vulnerable, bounces otherwise
+    if (boss.state === 'crouching') {
+      boss.hp--;
+      SoundManager.playDefeat();
+      camera.shakeFrames = 18;
+      if (boss.hp <= 0) {
+        boss.alive = false;
+      } else {
+        boss.state      = 'recovering';
+        boss.stateTimer = 1.2;
+      }
+    }
+    // End the charge and knock Hogman back regardless
+    player.sliding = false;
+    player.vx      = -player.facing * 5;
   } else if (player.invincibleTimer <= 0 && player.ringTimer <= 0) {
     // Side hit
     player.lives--;
@@ -2147,6 +2241,11 @@ function updateCollectibles() {
         SoundManager.playLampGet();
       } else {
         SoundManager.playCollect();
+        // Hogman charge fuel — taco smallest, burger mid, burrito most
+        if (gameState.selectedCharacter === 'hogman') {
+          const fuelGain = c.type === 'burrito' ? 0.50 : c.type === 'burger' ? 0.25 : 0.15;
+          player.chargeFuel = Math.min(1, player.chargeFuel + fuelGain);
+        }
         if (c.type === 'burger') {
           player.burgersCollected++;
           if (player.burgersCollected >= 3) {
@@ -2490,6 +2589,47 @@ function drawHUD() {
   ctx.shadowColor = 'rgba(0,0,0,1)';
   ctx.fillText(`${player.burgersCollected}/3`, 14 + ICO * 2 + 4, livesBottom + 5);
   ctx.fillText(`${player.tacosCollected}/5`,   76 + ICO * 2 + 4, livesBottom + 5);
+
+  // Hogman charge fuel bar
+  if (isHogmanChar) {
+    const BAR_W  = 120 + CPPAD * 2;
+    const BAR_H  = 5;
+    const barX   = 14 - CPPAD;
+    const barY   = livesBottom + ICO * 2 + CPPAD + 8;
+    const filled = player.chargeFuel || 0;
+    const ready  = filled >= 1;
+    const pulse  = ready ? 0.75 + 0.25 * Math.sin(elapsed * 5) : 1;
+    ctx.shadowBlur = 0;
+    // Backing panel (wider to fit F key)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(barX - CPPAD, barY - CPPAD, BAR_W + CPPAD * 2 + 22, BAR_H + 11 + CPPAD * 3);
+    // Track
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(barX, barY, BAR_W, BAR_H);
+    // Fill — dark green while building, toxic green when ready
+    ctx.fillStyle = ready ? `rgba(80,220,15,${pulse})` : '#1a5500';
+    ctx.fillRect(barX, barY, BAR_W * filled, BAR_H);
+    // Label
+    ctx.font        = '7px "Press Start 2P", monospace';
+    ctx.fillStyle   = ready ? `rgba(100,230,40,${pulse})` : 'rgba(100,180,50,0.4)';
+    ctx.textBaseline = 'top';
+    ctx.textAlign    = 'left';
+    ctx.fillText('HOG CHARGE', barX, barY + BAR_H + 3);
+    // F keycap — dim when not ready, toxic green when ready
+    const KEY_X = barX + BAR_W + 6;
+    const KEY_Y = barY + BAR_H + 1;
+    const KEY_W = 13, KEY_H = 12;
+    ctx.fillStyle = ready ? `rgba(70,210,10,${pulse * 0.95})` : 'rgba(10,30,8,0.8)';
+    ctx.fillRect(KEY_X, KEY_Y, KEY_W, KEY_H);
+    ctx.strokeStyle = ready ? `rgba(160,255,80,${pulse * 0.55})` : 'rgba(100,180,50,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(KEY_X + 0.5, KEY_Y + 0.5, KEY_W - 1, KEY_H - 1);
+    ctx.font        = '7px "Press Start 2P", monospace';
+    ctx.fillStyle   = ready ? '#051200' : 'rgba(100,180,50,0.3)';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('F', KEY_X + KEY_W / 2, KEY_Y + KEY_H / 2 + 1);
+  }
 
   // "+1 UP!" flash — centred on screen, fades out over last 0.8s
   if (player.extraLifeTimer > 0) {
