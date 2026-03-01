@@ -2441,14 +2441,16 @@ function drawHUD() {
 
   // Lives — top left
   let livesBottom = 36; // y below lives block, used to anchor progress row
-  if (gameState.selectedCharacter === 'gollum' && SpriteLoader.ready('gollum_idle')) {
+  const isHogmanChar = gameState.selectedCharacter === 'hogman';
+  const liveSprKey   = isHogmanChar ? 'hogman_idle' : 'gollum_idle';
+  if (SpriteLoader.ready(liveSprKey)) {
     const ICO_H = 48;
-    const sz    = SpriteLoader.size('gollum_idle');
+    const sz    = SpriteLoader.size(liveSprKey);
     const ICO_W = sz ? (sz.w / sz.h) * ICO_H : ICO_H;
 
     // Icons — no box, just floating
     for (let i = 0; i < player.lives; i++) {
-      SpriteLoader.blit('gollum_idle', 12 + i * (ICO_W + 6), 10, ICO_W, ICO_H);
+      SpriteLoader.blit(liveSprKey, 12 + i * (ICO_W + 6), 10, ICO_W, ICO_H);
     }
 
     // Label — tight box just behind the text
