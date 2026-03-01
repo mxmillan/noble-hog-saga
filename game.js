@@ -282,6 +282,13 @@ const SpriteLoader = (() => {
     l2_bg:       'assets/backgrounds/level2_tiles/bg_dark_forest.png',
     l2_ground:   'assets/backgrounds/level2_tiles/ground_grass_forest.png',
     l2_platform: 'assets/backgrounds/level2_tiles/platform_dark_forest.png',
+    // Level 3 tile assets
+    l3_bg:                  'assets/backgrounds/level3_tiles/bg_strange_city.png',
+    l3_ground:              'assets/backgrounds/level3_tiles/platform_cobble_street.png',
+    l3_platform_red:        'assets/backgrounds/level3_tiles/platform_red.png',
+    l3_platform_blue:       'assets/backgrounds/level3_tiles/platform_blue.png',
+    l3_platform_red_double: 'assets/backgrounds/level3_tiles/platform_red_double.png',
+    l2_city_gate:           'assets/backgrounds/level2_tiles/city_gate.png',
     // Level 1 tile assets
     tile_bg_green_hills:          'assets/backgrounds/level1_tiles/bg_green_hills.png',
     tile_ground_grass:            'assets/backgrounds/level1_tiles/ground_grass_standard.png',
@@ -850,32 +857,105 @@ function initLevel(level = 1) {
   if (level === 2) {
     // CHUNK 6 — Level 2 platform layout — dark forest, no ground in the middle
     platforms = [
-      // Start runway (ground before the platforming begins)
-      {x: 0,                      y: 420, width: LEVEL_PREAMBLE + 300, height: 80, type: 'ground'},
-      // End runway (landing strip to run off the level)
-      {x: LEVEL_WIDTH - 600,      y: 420, width: 600,                  height: 80, type: 'ground'},
+      // Start runway — extended under first platform so Hogman can charge straight up
+      {x: 0,                      y: 420, width: LEVEL_PREAMBLE + 700, height: 80, type: 'ground'},
+      // End runway — extended to provide solid ground under the city gate approach
+      {x: LEVEL_WIDTH - 1600,     y: 420, width: 1600,                 height: 80, type: 'ground'},
 
       {x:  500, y: 340, width: 400, height: 150, type: 'platform'},  // low
       {x: 1050, y: 270, width: 420, height: 150, type: 'platform'},  // mid
       {x: 1700, y: 210, width: 380, height: 150, type: 'platform'},  // high
       {x: 2300, y: 330, width: 440, height: 150, type: 'platform'},  // low
-      {x: 2950, y: 185, width: 400, height: 150, type: 'platform'},  // very high
+      {x: 2950, y: 230, width: 400, height: 150, type: 'platform'},  // high (was 185 — unreachable by Hogman charge)
       {x: 3550, y: 250, width: 420, height: 150, type: 'platform'},  // mid
       {x: 4150, y: 355, width: 380, height: 150, type: 'platform'},  // lowest
-      {x: 4750, y: 200, width: 440, height: 150, type: 'platform'},  // very high
+      {x: 4750, y: 255, width: 440, height: 150, type: 'platform'},  // high (was 200 — unreachable by Hogman charge)
       {x: 5400, y: 290, width: 400, height: 150, type: 'platform'},  // mid-low
       {x: 6000, y: 225, width: 420, height: 150, type: 'platform'},  // mid-high
       {x: 6600, y: 315, width: 380, height: 150, type: 'platform'},  // mid-low
-      {x: 7150, y: 180, width: 440, height: 150, type: 'platform'},  // highest
-      {x: 7750, y: 260, width: 400, height: 150, type: 'platform'},  // mid
     ];
 
-    // CHUNK 7 — Level 2 collectibles (none)
-    collectibles = [];
+    // CHUNK 7 — Level 2 collectibles
+    // Burritos on start runway give Hogman fuel for first jump.
+    // Burritos before big upward jumps (plat 4→5, plat 7→8).
+    // Tacos on every platform to keep gauge topped up.
+    // All x values are pre-preamble (shifted +1200 in init).
+    collectibles = [
+      // ── Start runway — give Hogman charge fuel before any platforming ─────
+      {x:  200, y: 398, type: 'burger',  collected: false},
+      {x:  400, y: 393, type: 'burrito', collected: false},
+      // ── Platform tacos (y = platY - 22) ──────────────────────────────────
+      {x:  700, y: 318, type: 'taco',    collected: false}, // plat 1
+      {x: 1260, y: 248, type: 'taco',    collected: false}, // plat 2
+      {x: 1890, y: 188, type: 'taco',    collected: false}, // plat 3
+      // Burrito on plat 4 — Hogman needs full fuel for the jump up to plat 5
+      {x: 2520, y: 308, type: 'burrito', collected: false}, // plat 4
+      {x: 3150, y: 208, type: 'taco',    collected: false}, // plat 5
+      {x: 3760, y: 228, type: 'taco',    collected: false}, // plat 6
+      // Burrito on plat 7 — Hogman needs full fuel for the jump up to plat 8
+      {x: 4340, y: 333, type: 'burrito', collected: false}, // plat 7
+      {x: 4970, y: 233, type: 'taco',    collected: false}, // plat 8
+      {x: 5600, y: 268, type: 'taco',    collected: false}, // plat 9
+      {x: 6210, y: 203, type: 'taco',    collected: false}, // plat 10
+      {x: 6790, y: 293, type: 'taco',    collected: false}, // plat 11
+    ];
 
     // CHUNK 8 — Level 2 enemies (none for now)
     enemies = [];
 
+    boss = null;
+
+  } else if (level === 3) {
+    // CHUNK 6 — Level 3 platform layout — city streets, solid ground
+    // Platforms are chunky blocks whose bottom sits flush with the ground (y+h=470).
+    // Heights: ~50 (low/easy), ~80-100 (mid), ~125-135 (high — charge-up or double-jump).
+    platforms = [
+      // Continuous cobblestone ground (lowered to y=470 for more visible floor)
+      {x: 0, y: 470, width: LEVEL_WIDTH, height: 80, type: 'ground'},
+
+      // Street block platforms (variant selects which tile asset to draw)
+      {x:  450, y: 420, width: 200, height:  50, type: 'platform', variant: 'red'},
+      {x:  900, y: 395, width: 220, height:  75, type: 'platform', variant: 'blue'},
+      {x: 1400, y: 355, width: 200, height: 115, type: 'platform', variant: 'red_double'},
+      {x: 1950, y: 425, width: 240, height:  45, type: 'platform', variant: 'red'},
+      {x: 2500, y: 335, width: 200, height: 135, type: 'platform', variant: 'blue'},
+      {x: 3100, y: 410, width: 220, height:  60, type: 'platform', variant: 'red_double'},
+      {x: 3700, y: 380, width: 200, height:  90, type: 'platform', variant: 'red'},
+      {x: 4300, y: 345, width: 220, height: 125, type: 'platform', variant: 'blue'},
+      {x: 4900, y: 420, width: 200, height:  50, type: 'platform', variant: 'red_double'},
+      {x: 5500, y: 390, width: 240, height:  80, type: 'platform', variant: 'red'},
+      {x: 6150, y: 335, width: 200, height: 135, type: 'platform', variant: 'blue'},
+      {x: 6800, y: 405, width: 220, height:  65, type: 'platform', variant: 'red_double'},
+      {x: 7500, y: 370, width: 200, height: 100, type: 'platform', variant: 'red'},
+    ];
+
+    // Collectibles — tacos above each platform, burgers to guide the start, burritos floating high
+    collectibles = [
+      // Ground burgers — ease players into the level (22px above ground surface y=470)
+      {x:  200, y: 448, type: 'burger',  collected: false},
+      {x:  400, y: 448, type: 'burger',  collected: false},
+      {x:  750, y: 448, type: 'burger',  collected: false},
+      // Tacos — centred above each platform (y = platY - 22)
+      {x:  545, y: 398, type: 'taco',    collected: false}, // plat 1
+      {x:  985, y: 373, type: 'taco',    collected: false}, // plat 2
+      {x: 1490, y: 333, type: 'taco',    collected: false}, // plat 3
+      {x: 2065, y: 403, type: 'taco',    collected: false}, // plat 4
+      {x: 2595, y: 313, type: 'taco',    collected: false}, // plat 5
+      {x: 3205, y: 388, type: 'taco',    collected: false}, // plat 6
+      {x: 3795, y: 358, type: 'taco',    collected: false}, // plat 7
+      {x: 4405, y: 323, type: 'taco',    collected: false}, // plat 8
+      {x: 4995, y: 398, type: 'taco',    collected: false}, // plat 9
+      {x: 5615, y: 368, type: 'taco',    collected: false}, // plat 10
+      {x: 6245, y: 313, type: 'taco',    collected: false}, // plat 11
+      {x: 6905, y: 383, type: 'taco',    collected: false}, // plat 12
+      {x: 7595, y: 348, type: 'taco',    collected: false}, // plat 13
+      // Burritos — high floaters between tall platforms (charge-up or double-jump reward)
+      {x: 2180, y: 280, type: 'burrito', collected: false},
+      {x: 4640, y: 285, type: 'burrito', collected: false},
+      {x: 6540, y: 275, type: 'burrito', collected: false},
+    ];
+
+    enemies = [];
     boss = null;
 
   } else {
@@ -1019,7 +1099,7 @@ function updatePlayer() {
         const fuel        = player.chargeFuel;
         player.chargeFuel = 0;
         player.sliding    = true;
-        player.slideTimer = Math.max(0.15, 0.45 * fuel); // duration scales with fuel
+        player.slideTimer = Math.max(0.40, 1.10 * fuel); // duration scales with fuel
         if (keys['ArrowUp']) {
           player.chargeUp = true;
           player.vy       = -(player.speed * 3.5); // strong upward burst
@@ -1166,8 +1246,10 @@ function updatePlayer() {
     player.y             = GROUND_Y - player.height;
     player.vx            = 0;
     player.vy            = 0;
+    player.chargeFuel    = 0;
     player.invincibleTimer = 2.0;
     camera.x             = 0;
+    collectibles.forEach(c => { c.collected = false; });
   }
 
   // --- Camera ---
@@ -2264,7 +2346,26 @@ function drawPlatform(plat) {
   const {x, y, width: w, height: h, type} = plat;
 
   if (type === 'ground') {
-    if (currentLevel === 2) {
+    if (currentLevel === 3) {
+      const GROUND_TOP_PAD = 8;
+      const tileY = y - GROUND_TOP_PAD;
+      const TILE_H = canvas.height - tileY;
+      if (SpriteLoader.ready('l3_ground')) {
+        const sz = SpriteLoader.size('l3_ground');
+        const tileW = sz ? (sz.w / sz.h) * TILE_H : 120;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x, y, w, canvas.height - y); ctx.clip();
+        for (let tx = x; tx < x + w; tx += tileW) {
+          SpriteLoader.blit('l3_ground', tx, tileY, tileW, TILE_H);
+        }
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#4a4a5a';
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = '#6a6a7a';
+        ctx.fillRect(x, y, w, 6);
+      }
+    } else if (currentLevel === 2) {
       const GROUND_TOP_PAD = 10;
       const tileY = y - GROUND_TOP_PAD;
       const TILE_H = canvas.height - tileY;
@@ -2334,6 +2435,28 @@ function drawPlatform(plat) {
           ctx.beginPath(); ctx.moveTo(bx, y + row * 22); ctx.lineTo(bx, y + (row + 1) * 22); ctx.stroke();
         }
       }
+    }
+
+  } else if (currentLevel === 3) {
+    // Level 3: tall city-block platforms, drawn full height down to ground.
+    // h is designed so y + h = 420 (ground surface), so h IS the visual height.
+    const platKeys = {
+      red:        'l3_platform_red',
+      blue:       'l3_platform_blue',
+      red_double: 'l3_platform_red_double',
+    };
+    const sprKey = platKeys[plat.variant] || 'l3_platform_red';
+    if (SpriteLoader.ready(sprKey)) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+      SpriteLoader.blit(sprKey, x, y, w, h);
+      ctx.restore();
+    } else {
+      const colours = { red: '#8b2020', blue: '#1a3a8b', red_double: '#7a1a5a' };
+      ctx.fillStyle = colours[plat.variant] || '#5a5a5a';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(x, y, w, 4);
     }
 
   } else if (currentLevel === 2) {
@@ -2444,7 +2567,7 @@ function drawPlayingScene() {
   // Falls back to drawSky() + drawBgTrees() if the sprite isn't loaded
   ctx.save();
   ctx.translate(Math.round(sx * 0.6), Math.round(sy * 0.6)); // integer px to avoid sub-pixel tile seams
-  const bgKey = currentLevel === 2 ? 'l2_bg' : 'tile_bg_green_hills';
+  const bgKey = currentLevel === 3 ? 'l3_bg' : currentLevel === 2 ? 'l2_bg' : 'tile_bg_green_hills';
   if (SpriteLoader.ready(bgKey)) {
     drawTiledLayer(bgKey, camera.x * 0.5, canvas.height + 4, canvas.height + 8);
   } else {
@@ -2460,11 +2583,20 @@ function drawPlayingScene() {
 
   // Earth base fill — solid dark strip covering canvas bottom so sky never bleeds
   // through gaps below thin ground platforms (drawn before platforms so tiles sit on top)
-  ctx.fillStyle = '#1a0e06';
+  ctx.fillStyle = currentLevel === 3 ? '#1a1a2a' : '#1a0e06';
   ctx.fillRect(0, GROUND_Y + 48, LEVEL_WIDTH, 200);
 
   for (const plat of platforms) {
     drawPlatform(plat);
+  }
+
+  // City gate — drawn AFTER platforms so it overlays the ground
+  if (currentLevel === 2 && SpriteLoader.ready('l2_city_gate')) {
+    const sz = SpriteLoader.size('l2_city_gate');
+    const gateH = canvas.height * 1.2;
+    const gateW = sz ? (sz.w / sz.h) * gateH : gateH;
+    const drawY = 420 - gateH * 0.84;
+    SpriteLoader.blit('l2_city_gate', LEVEL_WIDTH - gateW * 0.85, drawY, gateW, gateH);
   }
 
   // Fallback ground strip (only visible before Chunk 6 platforms loaded)
@@ -2808,6 +2940,7 @@ function gameLoop(timestamp) {
     // DEV: jump to level with number keys
     if (justPressed['Digit1']) { initLevel(1); SoundManager.startMusic(); }
     if (justPressed['Digit2']) { initLevel(2); SoundManager.startMusic(); }
+    if (justPressed['Digit3']) { initLevel(3); SoundManager.startMusic(); }
     if (ringRevealTimer > 0) ringRevealTimer -= dt;
     if (player && player.extraLifeTimer > 0) player.extraLifeTimer -= dt;
     updatePlayer();
@@ -2875,6 +3008,10 @@ function gameLoop(timestamp) {
     if (justPressed['Enter']) {
       if (currentLevel === 1) {
         initLevel(2);
+        SoundManager.startMusic();
+        state = 'PLAYING';
+      } else if (currentLevel === 2) {
+        initLevel(3);
         SoundManager.startMusic();
         state = 'PLAYING';
       } else {
