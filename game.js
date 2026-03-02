@@ -39,6 +39,7 @@ let boss            = null; // Pond Brute boss object
 let projectiles     = [];   // boss beam projectiles
 let currentLevel    = 1;    // which level is active
 let ringRevealTimer = 0;    // drives the ONE_RING_TEXT full-screen overlay
+let tacoRainTimer   = 0;    // countdown between boss-fight taco drops (Hogman only)
 
 // ---------------------------------------------------------------------------
 // CHUNK 10 — SoundManager (Web Audio API, procedural sounds + background music)
@@ -1086,20 +1087,18 @@ function updatePlayer() {
   const isHogman = gameState.selectedCharacter === 'hogman';
 
   if (isHogman) {
-    // F key launches a charge; direction set by held inputs at moment of press
+    // F key launches a charge; hold F to sustain it — fuel drains while held
     if (player.sliding) {
-      player.slideTimer -= 1 / 60;
       if (!player.chargeUp) player.vx = player.slideVx; // horizontal: hold speed constant
-      if (player.slideTimer <= 0) {
+      if (keys['KeyF'] && player.chargeFuel > 0) {
+        player.chargeFuel = Math.max(0, player.chargeFuel - 1 / (60 * 2.5)); // drains over ~2.5s at full fuel
+      } else {
         player.sliding  = false;
         player.chargeUp = false;
       }
     } else {
       if (justPressed['KeyF'] && player.chargeFuel > 0) {
-        const fuel        = player.chargeFuel;
-        player.chargeFuel = 0;
-        player.sliding    = true;
-        player.slideTimer = Math.max(0.40, 1.10 * fuel); // duration scales with fuel
+        player.sliding  = true;
         if (keys['ArrowUp']) {
           player.chargeUp = true;
           player.vy       = -(player.speed * 3.5); // strong upward burst
@@ -1660,7 +1659,8 @@ function initBoss() {
     attackSalvoTimer: 0,      // countdown between beam salvos in 'attacking' state
     alive:            true,
   };
-  projectiles = [];
+  projectiles    = [];
+  tacoRainTimer  = 5 + Math.random() * 3; // first taco drops 5–8 s into the fight
 }
 
 function fireBeams() {
@@ -1846,9 +1846,10 @@ function checkBossCollision() {
         boss.stateTimer = 1.2;
       }
     }
-    // End the charge and knock Hogman back regardless
-    player.sliding = false;
-    player.vx      = -player.facing * 5;
+    // End the charge and knock Hogman back; invincibility prevents immediate follow-up hit
+    player.sliding        = false;
+    player.vx             = -player.facing * 5;
+    player.invincibleTimer = 0.5;
   } else if (player.invincibleTimer <= 0 && player.ringTimer <= 0) {
     // Side hit
     player.lives--;
@@ -1973,7 +1974,8 @@ function updateProjectiles() {
     p.x  += p.vx;
     p.y  += p.vy;
     if (p.x < -200 || p.x > LEVEL_WIDTH + 200 || p.y > 600) { p.alive = false; continue; }
-    if (player.invincibleTimer <= 0 && player.ringTimer <= 0 &&
+    const chargingHogman = player.sliding && gameState.selectedCharacter === 'hogman';
+    if (player.invincibleTimer <= 0 && player.ringTimer <= 0 && !chargingHogman &&
         p.x + 4 > player.x && p.x - 4 < player.x + player.width &&
         p.y + 4 > player.y && p.y - 4 < player.y + player.height) {
       p.alive = false;
@@ -2073,6 +2075,35 @@ const LEVEL_COMPLETE_LINES = [
   'to continue thy shameful quest.',
 ];
 
+const LEVEL2_COMPLETE_LINES = [
+  'ONWARD',
+  '',
+  'The forest ends abruptly,',
+  'as forests often do when',
+  "they've made their point.",
+  '',
+  'Ahead: a city. Loud, crooked,',
+  'and absolutely teeming with',
+  'people who have no idea',
+  'what a Hogman is.',
+  '',
+  'Somewhere in this mess',
+  'lives a wizard. He knows',
+  'where the lamp is. Probably.',
+  'He seemed very confident',
+  'in his letter, which was',
+  'written in gravy.',
+  '',
+  'The hog snorts.',
+  'The Gollum Man licks',
+  'a cobblestone.',
+  '',
+  'Time to find a wizard.',
+  '',
+  'Press ENTER',
+  'to continue your quest.',
+];
+
 function drawInterstitialPanel(heading1, heading2) {
   const W = canvas.width, H = canvas.height;
   const MID = 520;
@@ -2163,8 +2194,10 @@ function drawLevelComplete() {
   const PANEL_B    = H - 60;
   const PANEL_H    = PANEL_B - PANEL_T;
   const LINE_H     = 28;
-  // Stop first line level with 'COMPLETE' heading (h2Y = H*0.20 + 32)
-  const MAX_SCROLL = PANEL_T + PANEL_H - (H * 0.20 + 32);
+  const lines      = currentLevel === 2 ? LEVEL2_COMPLETE_LINES : LEVEL_COMPLETE_LINES;
+  // Ensure scroll goes far enough that the last line is fully visible
+  const baseScroll = PANEL_T + PANEL_H - (H * 0.20 + 32);
+  const MAX_SCROLL = Math.max(baseScroll, (lines.length - 1) * LINE_H + PANEL_T + LINE_H);
 
   // Advance scroll only until the text has reached the top
   if (levelCompleteScroll < MAX_SCROLL) levelCompleteScroll += 0.6;
@@ -2182,15 +2215,14 @@ function drawLevelComplete() {
 
   const startY = PANEL_T + PANEL_H - levelCompleteScroll;
 
-  LEVEL_COMPLETE_LINES.forEach((line, i) => {
+  lines.forEach((line, i) => {
     const y = startY + i * LINE_H;
     if (y < PANEL_T - LINE_H || y > PANEL_B + LINE_H) return;
 
     if (i === 0) {
-      // Title: "THE TILE TROLL IS " in gold, "SLAIN" in red + underlined
       ctx.font = '11px "Press Start 2P", monospace';
-      const prefix    = 'THE TILE TROLL IS ';
-      const highlight = 'SLAIN';
+      const prefix    = currentLevel === 2 ? '' : 'THE TILE TROLL IS ';
+      const highlight = currentLevel === 2 ? 'ONWARD' : 'SLAIN';
       const fullW     = ctx.measureText(prefix + highlight).width;
       const prefixW   = ctx.measureText(prefix).width;
       const highlightW = ctx.measureText(highlight).width;
@@ -2211,9 +2243,31 @@ function drawLevelComplete() {
       ctx.textAlign   = 'center';
     } else {
       ctx.font      = '9px "Press Start 2P", monospace';
-      ctx.fillStyle = '#c8a84a';
       ctx.textAlign = 'center';
-      ctx.fillText(line, cx, y);
+      const bodyColour = line === 'Press ENTER' ? '#ffffff' : '#000000';
+      const wizIdx = line.toLowerCase().indexOf('wizard');
+      if (wizIdx !== -1) {
+        const before  = line.slice(0, wizIdx);
+        const keyword = line.slice(wizIdx, wizIdx + 6);
+        const after   = line.slice(wizIdx + 6);
+        const totalW  = ctx.measureText(line).width;
+        const beforeW = ctx.measureText(before).width;
+        const keyW    = ctx.measureText(keyword).width;
+        const startX  = cx - totalW / 2;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = bodyColour;
+        ctx.fillText(before, startX, y);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth   = 2;
+        ctx.strokeText(keyword, startX + beforeW, y);
+        ctx.fillStyle = '#4a90d9';
+        ctx.fillText(keyword, startX + beforeW, y);
+        ctx.fillStyle = bodyColour;
+        ctx.fillText(after, startX + beforeW + keyW, y);
+      } else {
+        ctx.fillStyle = bodyColour;
+        ctx.fillText(line, cx, y);
+      }
     }
   });
 
@@ -2303,6 +2357,16 @@ function updateCollectibles() {
   const rh  = player.height / 2 + COLL_HALF;
   for (const c of collectibles) {
     if (c.collected) continue;
+    if (c.falling) {
+      c.vy = Math.min(c.vy + 0.5, 15);
+      c.y += c.vy;
+      if (c.y >= GROUND_Y - COLL_HALF) {
+        c.y       = GROUND_Y - COLL_HALF;
+        c.vy      = 0;
+        c.falling = false;
+        c.bobOffset = Math.random() * Math.PI * 2;
+      }
+    }
     if (Math.abs(pcx - c.x) < rw && Math.abs(pcy - c.y) < rh) {
       c.collected = true;
       if (c.type === 'ring') {
@@ -2726,26 +2790,26 @@ function drawHUD() {
     // Track
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.fillRect(barX, barY, BAR_W, BAR_H);
-    // Fill — dark green while building, toxic green when ready
-    ctx.fillStyle = ready ? `rgba(80,220,15,${pulse})` : '#1a5500';
+    // Fill — bright green always, pulsing toxic green when ready
+    ctx.fillStyle = ready ? `rgba(80,220,15,${pulse})` : '#3aaa0a';
     ctx.fillRect(barX, barY, BAR_W * filled, BAR_H);
     // Label
     ctx.font        = '7px "Press Start 2P", monospace';
-    ctx.fillStyle   = ready ? `rgba(100,230,40,${pulse})` : 'rgba(100,180,50,0.4)';
+    ctx.fillStyle   = ready ? `rgba(100,230,40,${pulse})` : 'rgba(100,200,50,0.9)';
     ctx.textBaseline = 'top';
     ctx.textAlign    = 'left';
     ctx.fillText('HOG CHARGE', barX, barY + BAR_H + 3);
-    // F keycap — dim when not ready, toxic green when ready
+    // F keycap — always visible, toxic green when ready
     const KEY_X = barX + BAR_W + 6;
     const KEY_Y = barY + BAR_H + 1;
     const KEY_W = 13, KEY_H = 12;
-    ctx.fillStyle = ready ? `rgba(70,210,10,${pulse * 0.95})` : 'rgba(10,30,8,0.8)';
+    ctx.fillStyle = ready ? `rgba(70,210,10,${pulse * 0.95})` : 'rgba(30,100,15,0.85)';
     ctx.fillRect(KEY_X, KEY_Y, KEY_W, KEY_H);
-    ctx.strokeStyle = ready ? `rgba(160,255,80,${pulse * 0.55})` : 'rgba(100,180,50,0.15)';
+    ctx.strokeStyle = ready ? `rgba(160,255,80,${pulse * 0.55})` : 'rgba(100,200,50,0.5)';
     ctx.lineWidth = 1;
     ctx.strokeRect(KEY_X + 0.5, KEY_Y + 0.5, KEY_W - 1, KEY_H - 1);
     ctx.font        = '7px "Press Start 2P", monospace';
-    ctx.fillStyle   = ready ? '#051200' : 'rgba(100,180,50,0.3)';
+    ctx.fillStyle   = ready ? '#051200' : 'rgba(180,255,100,0.85)';
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('F', KEY_X + KEY_W / 2, KEY_Y + KEY_H / 2 + 1);
@@ -2948,6 +3012,23 @@ function gameLoop(timestamp) {
     checkEnemyCollisions();
     updateCollectibles();
     if (boss && boss.alive) updateBoss();
+
+    // Taco rain — Hogman only, active while boss is alive
+    if (boss && boss.alive && gameState.selectedCharacter === 'hogman') {
+      tacoRainTimer -= dt;
+      if (tacoRainTimer <= 0) {
+        const arenaL = boss.arenaLeft !== null ? boss.arenaLeft : BOSS_ARENA_LEFT;
+        const arenaR = LEVEL_WIDTH - 20;
+        const visL   = Math.max(arenaL, camera.x + 50);
+        const visR   = Math.min(arenaR, camera.x + canvas.width - 50);
+        if (visR > visL) {
+          const spawnX = visL + Math.random() * (visR - visL);
+          collectibles.push({ x: spawnX, y: -COLL_HALF, type: 'taco', collected: false, vy: 0, falling: true, bobOffset: 0 });
+        }
+        tacoRainTimer = 5 + Math.random() * 4; // next drop in 5–9 s
+      }
+    }
+
     updateProjectiles();
     if (boss && boss.alive) checkBossCollision();
     drawPlayingScene();
