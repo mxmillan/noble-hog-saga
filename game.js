@@ -283,6 +283,7 @@ const SpriteLoader = (() => {
     l2_bg:       'assets/backgrounds/level2_tiles/bg_dark_forest.png',
     l2_ground:   'assets/backgrounds/level2_tiles/ground_grass_forest.png',
     l2_platform: 'assets/backgrounds/level2_tiles/platform_dark_forest.png',
+    l2_pit:      'assets/backgrounds/level2_tiles/pit_dark_forest.png',
     // Level 3 tile assets
     l3_bg:                  'assets/backgrounds/level3_tiles/bg_strange_city.png',
     l3_ground:              'assets/backgrounds/level3_tiles/platform_cobble_street.png',
@@ -290,6 +291,8 @@ const SpriteLoader = (() => {
     l3_platform_blue:       'assets/backgrounds/level3_tiles/platform_blue.png',
     l3_platform_red_double: 'assets/backgrounds/level3_tiles/platform_red_double.png',
     l2_city_gate:           'assets/backgrounds/level2_tiles/city_gate.png',
+    l3_tower:  'assets/backgrounds/level3_tiles/tower_obstacle.png',
+    l3_awning: 'assets/backgrounds/level3_tiles/awning_jump_pad.png',
     // Level 1 tile assets
     tile_bg_green_hills:          'assets/backgrounds/level1_tiles/bg_green_hills.png',
     tile_ground_grass:            'assets/backgrounds/level1_tiles/ground_grass_standard.png',
@@ -907,53 +910,77 @@ function initLevel(level = 1) {
     boss = null;
 
   } else if (level === 3) {
-    // CHUNK 6 — Level 3 platform layout — city streets, solid ground
-    // Platforms are chunky blocks whose bottom sits flush with the ground (y+h=470).
-    // Heights: ~50 (low/easy), ~80-100 (mid), ~125-135 (high — charge-up or double-jump).
+    // CHUNK 6 — Level 3 platform layout — city streets
+    // 4 building clusters separated by alley gaps; towers fill the gaps as landmarks.
+    // Awnings on tower left walls act as jump pads (type: 'awning').
+    // All raw x values get +LEVEL_PREAMBLE offset below.
     platforms = [
-      // Continuous cobblestone ground (lowered to y=470 for more visible floor)
+      // Continuous cobblestone ground
       {x: 0, y: 470, width: LEVEL_WIDTH, height: 80, type: 'ground'},
 
-      // Street block platforms (variant selects which tile asset to draw)
-      {x:  450, y: 420, width: 200, height:  50, type: 'platform', variant: 'red'},
-      {x:  900, y: 395, width: 220, height:  75, type: 'platform', variant: 'blue'},
-      {x: 1400, y: 355, width: 200, height: 115, type: 'platform', variant: 'red_double'},
-      {x: 1950, y: 425, width: 240, height:  45, type: 'platform', variant: 'red'},
-      {x: 2500, y: 335, width: 200, height: 135, type: 'platform', variant: 'blue'},
-      {x: 3100, y: 410, width: 220, height:  60, type: 'platform', variant: 'red_double'},
+      // --- Cluster 1: Entrance District (easy, low) ---
+      {x:  200, y: 430, width: 200, height:  40, type: 'platform', variant: 'red'},
+      {x:  550, y: 405, width: 180, height:  65, type: 'platform', variant: 'blue'},
+      {x:  900, y: 425, width: 220, height:  45, type: 'platform', variant: 'red'},
+
+      // --- Alley gap 1 (~x1000-1800) — Tower A at raw x=1800 ---
+
+      // --- Cluster 2: Merchant Quarter (medium) ---
+      {x: 1900, y: 400, width: 200, height:  70, type: 'platform', variant: 'red_double'},
+      {x: 2250, y: 360, width: 180, height: 110, type: 'platform', variant: 'blue'},
+      {x: 2600, y: 415, width: 220, height:  55, type: 'platform', variant: 'red'},
+
+      // --- Alley gap 2 (~x2800-3500) — Tower B at raw x=3500 ---
+
+      // --- Cluster 3: Upper Warrens (harder) ---
       {x: 3700, y: 380, width: 200, height:  90, type: 'platform', variant: 'red'},
-      {x: 4300, y: 345, width: 220, height: 125, type: 'platform', variant: 'blue'},
-      {x: 4900, y: 420, width: 200, height:  50, type: 'platform', variant: 'red_double'},
-      {x: 5500, y: 390, width: 240, height:  80, type: 'platform', variant: 'red'},
-      {x: 6150, y: 335, width: 200, height: 135, type: 'platform', variant: 'blue'},
-      {x: 6800, y: 405, width: 220, height:  65, type: 'platform', variant: 'red_double'},
-      {x: 7500, y: 370, width: 200, height: 100, type: 'platform', variant: 'red'},
+      {x: 4050, y: 340, width: 200, height: 130, type: 'platform', variant: 'red_double'},
+      {x: 4450, y: 395, width: 240, height:  75, type: 'platform', variant: 'blue'},
+
+      // --- Alley gap 3 (~x4700-5600) — Tower C at raw x=5600 ---
+
+      // --- Cluster 4: Steep Spires (hardest) ---
+      {x: 5800, y: 350, width: 180, height: 120, type: 'platform', variant: 'blue'},
+      {x: 6200, y: 385, width: 200, height:  85, type: 'platform', variant: 'red'},
+      {x: 6600, y: 335, width: 180, height: 135, type: 'platform', variant: 'red_double'},
+
+      // --- Alley gap 4 (~x6800-7000) — Tower D at raw x=7000 ---
+
+      // --- Final approach ---
+      {x: 7300, y: 410, width: 260, height:  60, type: 'platform', variant: 'red'},
+
+      // --- Awning jump pads — left of each tower, player bounces up to burrito reward ---
+      {x: 1700, y: 280, width: 100, height: 20, type: 'awning'},
+      {x: 3400, y: 280, width: 100, height: 20, type: 'awning'},
+      {x: 5500, y: 280, width: 100, height: 20, type: 'awning'},
+      {x: 6900, y: 280, width: 100, height: 20, type: 'awning'},
     ];
 
-    // Collectibles — tacos above each platform, burgers to guide the start, burritos floating high
+    // Collectibles — tacos above each platform, burgers to guide start, burritos above awnings
     collectibles = [
-      // Ground burgers — ease players into the level (22px above ground surface y=470)
+      // Ground burgers
       {x:  200, y: 448, type: 'burger',  collected: false},
       {x:  400, y: 448, type: 'burger',  collected: false},
-      {x:  750, y: 448, type: 'burger',  collected: false},
+      {x:  700, y: 448, type: 'burger',  collected: false},
       // Tacos — centred above each platform (y = platY - 22)
-      {x:  545, y: 398, type: 'taco',    collected: false}, // plat 1
-      {x:  985, y: 373, type: 'taco',    collected: false}, // plat 2
-      {x: 1490, y: 333, type: 'taco',    collected: false}, // plat 3
-      {x: 2065, y: 403, type: 'taco',    collected: false}, // plat 4
-      {x: 2595, y: 313, type: 'taco',    collected: false}, // plat 5
-      {x: 3205, y: 388, type: 'taco',    collected: false}, // plat 6
-      {x: 3795, y: 358, type: 'taco',    collected: false}, // plat 7
-      {x: 4405, y: 323, type: 'taco',    collected: false}, // plat 8
-      {x: 4995, y: 398, type: 'taco',    collected: false}, // plat 9
-      {x: 5615, y: 368, type: 'taco',    collected: false}, // plat 10
-      {x: 6245, y: 313, type: 'taco',    collected: false}, // plat 11
-      {x: 6905, y: 383, type: 'taco',    collected: false}, // plat 12
-      {x: 7595, y: 348, type: 'taco',    collected: false}, // plat 13
-      // Burritos — high floaters between tall platforms (charge-up or double-jump reward)
-      {x: 2180, y: 280, type: 'burrito', collected: false},
-      {x: 4640, y: 285, type: 'burrito', collected: false},
-      {x: 6540, y: 275, type: 'burrito', collected: false},
+      {x:  295, y: 408, type: 'taco',    collected: false}, // cluster 1 plat 1
+      {x:  635, y: 383, type: 'taco',    collected: false}, // cluster 1 plat 2
+      {x: 1005, y: 403, type: 'taco',    collected: false}, // cluster 1 plat 3
+      {x: 1995, y: 378, type: 'taco',    collected: false}, // cluster 2 plat 1
+      {x: 2335, y: 338, type: 'taco',    collected: false}, // cluster 2 plat 2
+      {x: 2705, y: 393, type: 'taco',    collected: false}, // cluster 2 plat 3
+      {x: 3795, y: 358, type: 'taco',    collected: false}, // cluster 3 plat 1
+      {x: 4145, y: 318, type: 'taco',    collected: false}, // cluster 3 plat 2
+      {x: 4565, y: 373, type: 'taco',    collected: false}, // cluster 3 plat 3
+      {x: 5895, y: 328, type: 'taco',    collected: false}, // cluster 4 plat 1
+      {x: 6295, y: 363, type: 'taco',    collected: false}, // cluster 4 plat 2
+      {x: 6685, y: 313, type: 'taco',    collected: false}, // cluster 4 plat 3
+      {x: 7425, y: 388, type: 'taco',    collected: false}, // final platform
+      // Burritos — above each awning, only reachable via bounce
+      {x: 1750, y: 215, type: 'burrito', collected: false}, // above awning 1
+      {x: 3450, y: 215, type: 'burrito', collected: false}, // above awning 2
+      {x: 5550, y: 215, type: 'burrito', collected: false}, // above awning 3
+      {x: 6950, y: 215, type: 'burrito', collected: false}, // above awning 4
     ];
 
     enemies = [];
@@ -1273,10 +1300,18 @@ function resolvePlatformCollision(p, plat) {
     prevBottom <= plat.y + 1 &&       // was above (or flush with) platform top
     p.y + p.height >= plat.y          // now overlapping
   ) {
-    p.y          = plat.y - p.height;
-    p.vy         = 0;
-    p.isOnGround = true;
-    p.isJumping  = false;
+    p.y = plat.y - p.height;
+    if (plat.type === 'awning') {
+      p.vy         = -14;    // strong bounce — ~2.3x Hogman jump
+      p.isOnGround = false;
+      p.isJumping  = true;
+      p.jumpHeld   = false;  // prevent variable-jump dampening cutting the bounce
+      SoundManager.playJump();
+    } else {
+      p.vy         = 0;
+      p.isOnGround = true;
+      p.isJumping  = false;
+    }
   } else if (
     p.vy < 0 &&                             // rising
     p.y - p.vy >= plat.y + plat.height - 1 && // prev top was at or below platform underside
@@ -2501,6 +2536,23 @@ function drawPlatform(plat) {
       }
     }
 
+  } else if (type === 'awning') {
+    // Awning jump pad — shop canopy on tower wall. Bracket on right, fabric extends left.
+    const SPR_W = 120, SPR_H = 75;
+    const drawX = x + w - SPR_W; // right edge of sprite aligns with right (bracket) side
+    const drawY = y - (SPR_H - 20); // shift up so sprite surface aligns with collision top
+    if (SpriteLoader.ready('l3_awning')) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      SpriteLoader.blit('l3_awning', drawX, drawY, SPR_W, SPR_H);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(x, y, w, 8);
+      ctx.fillStyle = '#D4AA50';
+      ctx.fillRect(x, y + 8, w, 12);
+    }
+
   } else if (currentLevel === 3) {
     // Level 3: tall city-block platforms, drawn full height down to ground.
     // h is designed so y + h = 420 (ground surface), so h IS the visual height.
@@ -2649,6 +2701,48 @@ function drawPlayingScene() {
   // through gaps below thin ground platforms (drawn before platforms so tiles sit on top)
   ctx.fillStyle = currentLevel === 3 ? '#1a1a2a' : '#1a0e06';
   ctx.fillRect(0, GROUND_Y + 48, LEVEL_WIDTH, 200);
+  if (currentLevel === 2 && SpriteLoader.ready('l2_pit')) {
+    const pitImg = SpriteLoader.size('l2_pit');
+    if (pitImg) {
+      const pitH = 200;
+      const pitW = Math.round((pitImg.w / pitImg.h) * pitH);
+      for (let tx = 0; tx < LEVEL_WIDTH; tx += pitW) {
+        SpriteLoader.blit('l2_pit', tx, GROUND_Y, pitW, pitH);
+      }
+    }
+    // Dark gradient at the top of the pit to give depth / danger read
+    const grad = ctx.createLinearGradient(0, GROUND_Y, 0, GROUND_Y + 80);
+    grad.addColorStop(0, 'rgba(0,0,0,0.85)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, GROUND_Y, LEVEL_WIDTH, 80);
+  }
+
+  // Level 3 towers — city landmark buildings in alley gaps, drawn behind platforms/player
+  if (currentLevel === 3) {
+    const TOWER_W = 220, TOWER_H = 340;
+    const TOWER_Y = 470 - TOWER_H; // bottom anchors to ground surface
+    const towerXs = [1800, 3500, 5600, 7000].map(rx => rx + LEVEL_PREAMBLE);
+    if (SpriteLoader.ready('l3_tower')) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      for (const tx of towerXs) {
+        SpriteLoader.blit('l3_tower', tx, TOWER_Y, TOWER_W, TOWER_H);
+      }
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#1e1828';
+      for (const tx of towerXs) {
+        ctx.fillRect(tx, TOWER_Y, TOWER_W, TOWER_H);
+        ctx.fillStyle = 'rgba(255,210,100,0.35)';
+        for (let floor = 0; floor < 4; floor++) {
+          ctx.fillRect(tx + 40, TOWER_Y + 30 + floor * 80, 50, 28);
+          ctx.fillRect(tx + 120, TOWER_Y + 30 + floor * 80, 50, 28);
+        }
+        ctx.fillStyle = '#1e1828';
+      }
+    }
+  }
 
   for (const plat of platforms) {
     drawPlatform(plat);
