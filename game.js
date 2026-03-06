@@ -910,77 +910,82 @@ function initLevel(level = 1) {
     boss = null;
 
   } else if (level === 3) {
-    // CHUNK 6 — Level 3 platform layout — city streets
-    // 4 building clusters separated by alley gaps; towers fill the gaps as landmarks.
-    // Awnings on tower left walls act as jump pads (type: 'awning').
-    // All raw x values get +LEVEL_PREAMBLE offset below.
+    // CHUNK 6 — Level 3 platform layout — city tower gauntlet
+    //
+    // Core mechanic: 4 tower_wall obstacles of increasing height block the path.
+    // Player bounces off awning jump pads to clear each tower.
+    //
+    // Tower tops (y):  T1=310  T2=255  T3=205  T4=165
+    // Awning bounce:   feet peak at awningY - 203
+    //
+    // side:'left'  → bracket on right, fabric left  (approach side, default)
+    // side:'right' → bracket on left, fabric right  (mirrored; visual variety)
+    // sprScale     → optional visual scale multiplier (hitbox unchanged)
+    //
+    // All raw x values get +LEVEL_PREAMBLE offset at end of initLevel().
+
+    // Towers match background building scale (~290-310px tall).
+    // bounceForce:16 → bounce height 256px, clearing all towers from ground-level awnings.
+    // drawOffsetY pushes the awning sprite up the tower face so it sits visually ~halfway up.
+    //
+    // Visual halfway formula: sprite sits at towerTop + towerHeight/2
+    //   sprite drawY (without offset) = awningY - 55
+    //   drawOffsetY = awningY - 55 - (towerTop + towerHeight/2)
+    //
+    // T1: awningY=418, towerTop=178, h=292 → midpoint=324 → drawOffsetY = 418-55-324 = 39
+    // T2: awningY=412, towerTop=174, h=296 → midpoint=322 → drawOffsetY = 412-55-322 = 35
+    // T3: awningY=406, towerTop=170, h=300 → midpoint=320 → drawOffsetY = 406-55-320 = 31
+    // T4: awningY=400, towerTop=165, h=305 → midpoint=317 → drawOffsetY = 400-55-317 = 28
     platforms = [
       // Continuous cobblestone ground
       {x: 0, y: 470, width: LEVEL_WIDTH, height: 80, type: 'ground'},
 
-      // --- Cluster 1: Entrance District (easy, low) ---
-      {x:  200, y: 430, width: 200, height:  40, type: 'platform', variant: 'red'},
-      {x:  550, y: 405, width: 180, height:  65, type: 'platform', variant: 'blue'},
-      {x:  900, y: 425, width: 220, height:  45, type: 'platform', variant: 'red'},
+      // ── TOWER 1 ──────────────────────────────────────────────────────────
+      {x: 1400, y: 162, width: 185, height: 308, type: 'tower_wall'},
+      {x: 1230, y: 418, width: 90, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: 42, wallOffset: 110},
+      // bounceForce:17 → height 289px. Peak: 418-289=129 < 162 ✓
 
-      // --- Alley gap 1 (~x1000-1800) — Tower A at raw x=1800 ---
+      // ── TOWER 2 ──────────────────────────────────────────────────────────
+      {x: 2800, y: 158, width: 195, height: 312, type: 'tower_wall'},
+      {x: 2625, y: 412, width: 92, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: 40, wallOffset: 110},
+      // Peak: 412-289=123 < 158 ✓
 
-      // --- Cluster 2: Merchant Quarter (medium) ---
-      {x: 1900, y: 400, width: 200, height:  70, type: 'platform', variant: 'red_double'},
-      {x: 2250, y: 360, width: 180, height: 110, type: 'platform', variant: 'blue'},
-      {x: 2600, y: 415, width: 220, height:  55, type: 'platform', variant: 'red'},
+      // ── TOWER 3 ──────────────────────────────────────────────────────────
+      {x: 4300, y: 154, width: 205, height: 316, type: 'tower_wall'},
+      {x: 4120, y: 406, width: 95, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: 38, wallOffset: 110},
+      // Peak: 406-289=117 < 154 ✓
 
-      // --- Alley gap 2 (~x2800-3500) — Tower B at raw x=3500 ---
-
-      // --- Cluster 3: Upper Warrens (harder) ---
-      {x: 3700, y: 380, width: 200, height:  90, type: 'platform', variant: 'red'},
-      {x: 4050, y: 340, width: 200, height: 130, type: 'platform', variant: 'red_double'},
-      {x: 4450, y: 395, width: 240, height:  75, type: 'platform', variant: 'blue'},
-
-      // --- Alley gap 3 (~x4700-5600) — Tower C at raw x=5600 ---
-
-      // --- Cluster 4: Steep Spires (hardest) ---
-      {x: 5800, y: 350, width: 180, height: 120, type: 'platform', variant: 'blue'},
-      {x: 6200, y: 385, width: 200, height:  85, type: 'platform', variant: 'red'},
-      {x: 6600, y: 335, width: 180, height: 135, type: 'platform', variant: 'red_double'},
-
-      // --- Alley gap 4 (~x6800-7000) — Tower D at raw x=7000 ---
-
-      // --- Final approach ---
-      {x: 7300, y: 410, width: 260, height:  60, type: 'platform', variant: 'red'},
-
-      // --- Awning jump pads — left of each tower, player bounces up to burrito reward ---
-      {x: 1700, y: 280, width: 100, height: 20, type: 'awning'},
-      {x: 3400, y: 280, width: 100, height: 20, type: 'awning'},
-      {x: 5500, y: 280, width: 100, height: 20, type: 'awning'},
-      {x: 6900, y: 280, width: 100, height: 20, type: 'awning'},
+      // ── TOWER 4 — tallest ────────────────────────────────────────────────
+      {x: 5900, y: 148, width: 215, height: 322, type: 'tower_wall'},
+      {x: 5710, y: 400, width: 100, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: 36, wallOffset: 110, sprScale: 1.1},
+      // Peak: 400-289=111 < 148 ✓
     ];
 
-    // Collectibles — tacos above each platform, burgers to guide start, burritos above awnings
     collectibles = [
-      // Ground burgers
-      {x:  200, y: 448, type: 'burger',  collected: false},
-      {x:  400, y: 448, type: 'burger',  collected: false},
-      {x:  700, y: 448, type: 'burger',  collected: false},
-      // Tacos — centred above each platform (y = platY - 22)
-      {x:  295, y: 408, type: 'taco',    collected: false}, // cluster 1 plat 1
-      {x:  635, y: 383, type: 'taco',    collected: false}, // cluster 1 plat 2
-      {x: 1005, y: 403, type: 'taco',    collected: false}, // cluster 1 plat 3
-      {x: 1995, y: 378, type: 'taco',    collected: false}, // cluster 2 plat 1
-      {x: 2335, y: 338, type: 'taco',    collected: false}, // cluster 2 plat 2
-      {x: 2705, y: 393, type: 'taco',    collected: false}, // cluster 2 plat 3
-      {x: 3795, y: 358, type: 'taco',    collected: false}, // cluster 3 plat 1
-      {x: 4145, y: 318, type: 'taco',    collected: false}, // cluster 3 plat 2
-      {x: 4565, y: 373, type: 'taco',    collected: false}, // cluster 3 plat 3
-      {x: 5895, y: 328, type: 'taco',    collected: false}, // cluster 4 plat 1
-      {x: 6295, y: 363, type: 'taco',    collected: false}, // cluster 4 plat 2
-      {x: 6685, y: 313, type: 'taco',    collected: false}, // cluster 4 plat 3
-      {x: 7425, y: 388, type: 'taco',    collected: false}, // final platform
-      // Burritos — above each awning, only reachable via bounce
-      {x: 1750, y: 215, type: 'burrito', collected: false}, // above awning 1
-      {x: 3450, y: 215, type: 'burrito', collected: false}, // above awning 2
-      {x: 5550, y: 215, type: 'burrito', collected: false}, // above awning 3
-      {x: 6950, y: 215, type: 'burrito', collected: false}, // above awning 4
+      // ── Ground burgers — guide player to first tower ──────────────────────
+      {x:  300, y: 448, type: 'burger',  collected: false},
+      {x:  650, y: 448, type: 'burger',  collected: false},
+      {x: 1000, y: 448, type: 'burger',  collected: false},
+      // ── Tower top tacos (reward for clearing each tower) ─────────────────
+      {x: 1490, y: 140, type: 'taco',    collected: false}, // T1 top
+      {x: 2895, y: 136, type: 'taco',    collected: false}, // T2 top
+      {x: 4400, y: 132, type: 'taco',    collected: false}, // T3 top
+      {x: 6005, y: 126, type: 'taco',    collected: false}, // T4 top
+      // ── Burritos at bounce apex — very high, hard to collect ─────────────
+      {x: 1275, y:  85, type: 'burrito', collected: false}, // T1 apex
+      {x: 2670, y:  79, type: 'burrito', collected: false}, // T2 apex
+      {x: 4165, y:  73, type: 'burrito', collected: false}, // T3 apex
+      {x: 5755, y:  67, type: 'burrito', collected: false}, // T4 apex
+      // ── Ground tacos between towers ───────────────────────────────────────
+      {x: 2100, y: 448, type: 'taco',    collected: false},
+      {x: 3500, y: 448, type: 'taco',    collected: false},
+      {x: 5100, y: 448, type: 'taco',    collected: false},
+      {x: 6800, y: 448, type: 'taco',    collected: false},
+      {x: 7400, y: 448, type: 'taco',    collected: false},
     ];
 
     enemies = [];
@@ -1302,7 +1307,7 @@ function resolvePlatformCollision(p, plat) {
   ) {
     p.y = plat.y - p.height;
     if (plat.type === 'awning') {
-      p.vy         = -14;    // strong bounce — ~2.3x Hogman jump
+      p.vy         = -(plat.bounceForce || 14); // default strong bounce; level 3 uses higher force
       p.isOnGround = false;
       p.isJumping  = true;
       p.jumpHeld   = false;  // prevent variable-jump dampening cutting the bounce
@@ -1319,6 +1324,24 @@ function resolvePlatformCollision(p, plat) {
   ) {
     p.y  = plat.y + plat.height;            // push head to just below the platform
     p.vy = 0;
+  }
+
+  // Horizontal side-wall blocking for tower obstacles.
+  // Only fires when the player's feet are BELOW the tower top — once the player bounces
+  // high enough to clear the top (feet above tower.y) this check is skipped, letting
+  // them pass over freely.
+  if (plat.type === 'tower_wall') {
+    if (p.y + p.height > plat.y && p.y < plat.y + plat.height) {
+      if (p.x + p.width > plat.x && p.x < plat.x + plat.width) {
+        if (p.x + p.width / 2 < plat.x + plat.width / 2) {
+          p.x = plat.x - p.width;
+          if (p.vx > 0) p.vx = 0;
+        } else {
+          p.x = plat.x + plat.width;
+          if (p.vx < 0) p.vx = 0;
+        }
+      }
+    }
   }
 }
 
@@ -2536,16 +2559,57 @@ function drawPlatform(plat) {
       }
     }
 
+  } else if (type === 'tower_wall') {
+    // Solid tower obstacle — maintain sprite aspect ratio, centered on collision box.
+    // The sprite has ~18% transparent padding on left/right and ~5% at the bottom.
+    // SINK extends the draw height so the building base visually sits on the ground
+    // (the extra pixels draw under the ground tile and are hidden).
+    if (SpriteLoader.ready('l3_tower')) {
+      const sz = SpriteLoader.size('l3_tower');
+      const SINK = 30; // extra px to bury the bottom transparent padding in the ground
+      const drawH = h + SINK;
+      const drawW = sz ? (sz.w / sz.h) * drawH : w;
+      const drawX = x + (w - drawW) / 2;
+      SpriteLoader.blit('l3_tower', drawX, y, drawW, drawH);
+    } else {
+      ctx.fillStyle = '#1e1828';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(255,210,100,0.3)';
+      for (let floor = 0; floor * 70 < h - 30; floor++) {
+        ctx.fillRect(x + 18, y + 20 + floor * 70, w - 36, 22);
+        ctx.fillRect(x + w - 18 - (w - 36), y + 20 + floor * 70, w - 36, 22);
+      }
+    }
+
   } else if (type === 'awning') {
-    // Awning jump pad — shop canopy on tower wall. Bracket on right, fabric extends left.
-    const SPR_W = 120, SPR_H = 75;
-    const drawX = x + w - SPR_W; // right edge of sprite aligns with right (bracket) side
-    const drawY = y - (SPR_H - 20); // shift up so sprite surface aligns with collision top
+    // Awning jump pad — shop canopy on tower wall.
+    // side:'left'  → bracket on right, fabric extends left  (default / original)
+    // side:'right' → bracket on left, fabric extends right (sprite flipped)
+    const sprScale = plat.sprScale || 1; // optional per-awning size multiplier
+    const SPR_W = Math.round(120 * sprScale);
+    const SPR_H = Math.round(75  * sprScale);
+    const isRight = plat.side === 'right';
+    // drawOffsetY: push sprite higher on the tower face than the collision box
+    const extraUp = plat.drawOffsetY || 0;
+    const drawY = y - (SPR_H - Math.round(20 * sprScale)) - extraUp;
+    // wallOffset: extend sprite RIGHT edge toward the tower wall so it looks attached.
+    // The hitbox ends wallOffset px short of the wall to avoid collision conflicts,
+    // but the sprite visually bridges that gap.
+    const wallOffset = plat.wallOffset || 0;
+
     if (SpriteLoader.ready('l3_awning')) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'multiply';
-      SpriteLoader.blit('l3_awning', drawX, drawY, SPR_W, SPR_H);
-      ctx.restore();
+      if (isRight) {
+        // Flip horizontally: bracket moves to left side, fabric to right
+        ctx.save();
+        ctx.translate(x + w, 0);
+        ctx.scale(-1, 1);
+        SpriteLoader.blit('l3_awning', 0, drawY, SPR_W, SPR_H);
+        ctx.restore();
+      } else {
+        // Bracket (right edge of sprite) aligns with tower wall, not hitbox edge
+        const drawX = x + w + wallOffset - SPR_W;
+        SpriteLoader.blit('l3_awning', drawX, drawY, SPR_W, SPR_H);
+      }
     } else {
       ctx.fillStyle = '#8B6914';
       ctx.fillRect(x, y, w, 8);
@@ -2716,32 +2780,6 @@ function drawPlayingScene() {
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, GROUND_Y, LEVEL_WIDTH, 80);
-  }
-
-  // Level 3 towers — city landmark buildings in alley gaps, drawn behind platforms/player
-  if (currentLevel === 3) {
-    const TOWER_W = 220, TOWER_H = 340;
-    const TOWER_Y = 470 - TOWER_H; // bottom anchors to ground surface
-    const towerXs = [1800, 3500, 5600, 7000].map(rx => rx + LEVEL_PREAMBLE);
-    if (SpriteLoader.ready('l3_tower')) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'multiply';
-      for (const tx of towerXs) {
-        SpriteLoader.blit('l3_tower', tx, TOWER_Y, TOWER_W, TOWER_H);
-      }
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#1e1828';
-      for (const tx of towerXs) {
-        ctx.fillRect(tx, TOWER_Y, TOWER_W, TOWER_H);
-        ctx.fillStyle = 'rgba(255,210,100,0.35)';
-        for (let floor = 0; floor < 4; floor++) {
-          ctx.fillRect(tx + 40, TOWER_Y + 30 + floor * 80, 50, 28);
-          ctx.fillRect(tx + 120, TOWER_Y + 30 + floor * 80, 50, 28);
-        }
-        ctx.fillStyle = '#1e1828';
-      }
-    }
   }
 
   for (const plat of platforms) {
