@@ -287,12 +287,12 @@ const SpriteLoader = (() => {
     // Level 3 tile assets
     l3_bg:                  'assets/backgrounds/level3_tiles/bg_strange_city.png',
     l3_ground:              'assets/backgrounds/level3_tiles/platform_cobble_street.png',
-    l3_platform_red:        'assets/backgrounds/level3_tiles/platform_red.png',
-    l3_platform_blue:       'assets/backgrounds/level3_tiles/platform_blue.png',
-    l3_platform_red_double: 'assets/backgrounds/level3_tiles/platform_red_double.png',
     l2_city_gate:           'assets/backgrounds/level2_tiles/city_gate.png',
     l3_tower:  'assets/backgrounds/level3_tiles/tower_obstacle.png',
     l3_awning: 'assets/backgrounds/level3_tiles/awning_jump_pad.png',
+    l3_cart:         'assets/backgrounds/level3_tiles/cart.png',
+    l3_low_building: 'assets/backgrounds/level3_tiles/low_building.png',
+    l3_two_storey:   'assets/backgrounds/level3_tiles/two_storey_obstacle.png',
     // Level 1 tile assets
     tile_bg_green_hills:          'assets/backgrounds/level1_tiles/bg_green_hills.png',
     tile_ground_grass:            'assets/backgrounds/level1_tiles/ground_grass_standard.png',
@@ -940,11 +940,18 @@ function initLevel(level = 1) {
       // Continuous cobblestone ground
       {x: 0, y: 470, width: LEVEL_WIDTH, height: 80, type: 'ground'},
 
+      // ── CART 1 (small platform before T1) ────────────────────────────────
+      {x: 700,  y: 420, width: 95,  height: 50,  type: 'cart'},
+
+      // ── LOW BUILDING + TWO-STOREY drawn first so towers render on top ─────
+      {x: 1548, y: 355, width: 1212, height: 115, type: 'low_building'},
+      {x: 2080, y: 230, width: 250, height: 240, type: 'two_storey'},
+
       // ── TOWER 1 ──────────────────────────────────────────────────────────
       {x: 1400, y: 162, width: 185, height: 308, type: 'tower_wall'},
-      {x: 1230, y: 418, width: 90, height: 14, type: 'awning', side: 'left',
-       bounceForce: 17, drawOffsetY: 42, wallOffset: 110},
-      // bounceForce:17 → height 289px. Peak: 418-289=129 < 162 ✓
+      {x: 1310, y: 405, width: 90, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: 10, wallOffset: 110},
+      // bounceForce:17 → height 289px. Peak: 405-289=116 < 162 ✓
 
       // ── TOWER 2 ──────────────────────────────────────────────────────────
       {x: 2800, y: 158, width: 195, height: 312, type: 'tower_wall'},
@@ -952,17 +959,26 @@ function initLevel(level = 1) {
        bounceForce: 17, drawOffsetY: 40, wallOffset: 110},
       // Peak: 412-289=123 < 158 ✓
 
+      // ── TWO-STOREY BUILDING (between T2 and T3) ──────────────────────────
+      {x: 3200, y: 230, width: 250, height: 240, type: 'two_storey'},
+
       // ── TOWER 3 ──────────────────────────────────────────────────────────
       {x: 4300, y: 154, width: 205, height: 316, type: 'tower_wall'},
       {x: 4120, y: 406, width: 95, height: 14, type: 'awning', side: 'left',
        bounceForce: 17, drawOffsetY: 38, wallOffset: 110},
       // Peak: 406-289=117 < 154 ✓
 
+      // ── CART 2 (between T3 and T4) ───────────────────────────────────────
+      {x: 4750, y: 420, width: 95,  height: 50,  type: 'cart'},
+
       // ── TOWER 4 — tallest ────────────────────────────────────────────────
       {x: 5900, y: 148, width: 215, height: 322, type: 'tower_wall'},
       {x: 5710, y: 400, width: 100, height: 14, type: 'awning', side: 'left',
        bounceForce: 17, drawOffsetY: 36, wallOffset: 110, sprScale: 1.1},
       // Peak: 400-289=111 < 148 ✓
+
+      // ── TWO-STOREY 2 (after T4) ───────────────────────────────────────────
+      {x: 6350, y: 230, width: 250, height: 240, type: 'two_storey'},
     ];
 
     collectibles = [
@@ -1318,6 +1334,7 @@ function resolvePlatformCollision(p, plat) {
       p.isJumping  = false;
     }
   } else if (
+    plat.type !== 'awning' &&               // awning is pass-through from below; land-on-top only
     p.vy < 0 &&                             // rising
     p.y - p.vy >= plat.y + plat.height - 1 && // prev top was at or below platform underside
     p.y < plat.y + plat.height              // current top has entered the platform from below
@@ -1498,9 +1515,9 @@ function drawGollumInGame(x, y, w, h) {
     const drawW = sz ? (sz.w / sz.h) * drawH : drawH;
     const drawX = x + (w - drawW) / 2; // horizontally centre on hitbox
     // Each sprite has different transparent padding at the bottom of the 1024px source image.
-    // Idle/run: ~177px gap → ~16px at VISUAL_H=92, offset 14 keeps feet grounded.
-    // Crouching: ~261px gap → ~24px at VISUAL_H=92, needs offset 22 to stay grounded.
-    const sinkOffset = (sprKey === 'gollum_crouching') ? 22 : 14;
+    // Idle/run: offset 26 keeps feet grounded.
+    // Crouching: needs offset 34 to stay grounded.
+    const sinkOffset = (sprKey === 'gollum_crouching') ? 34 : 26;
     const drawY = y + h - drawH + sinkOffset;
 
     SpriteLoader.blit(sprKey, drawX, drawY, drawW, drawH);
@@ -2617,26 +2634,49 @@ function drawPlatform(plat) {
       ctx.fillRect(x, y + 8, w, 12);
     }
 
-  } else if (currentLevel === 3) {
-    // Level 3: tall city-block platforms, drawn full height down to ground.
-    // h is designed so y + h = 420 (ground surface), so h IS the visual height.
-    const platKeys = {
-      red:        'l3_platform_red',
-      blue:       'l3_platform_blue',
-      red_double: 'l3_platform_red_double',
-    };
-    const sprKey = platKeys[plat.variant] || 'l3_platform_red';
-    if (SpriteLoader.ready(sprKey)) {
+  } else if (type === 'cart') {
+    // Cart — sprite fills from collision top (y) down to ground (y+h), aspect-correct width.
+    if (SpriteLoader.ready('l3_cart')) {
+      const sz = SpriteLoader.size('l3_cart');
+      const drawW = sz ? (sz.w / sz.h) * h : w;
+      const drawX = x + (w - drawW) / 2;
+      SpriteLoader.blit('l3_cart', drawX, y, drawW, h);
+    } else {
+      ctx.fillStyle = '#8B5E3C';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#6B3E1C';
+      ctx.fillRect(x, y + h - 8, w, 8);
+    }
+
+  } else if (type === 'low_building') {
+    // Wide low building — tiled horizontally, parapet at top = landing surface.
+    if (SpriteLoader.ready('l3_low_building')) {
+      const sz = SpriteLoader.size('l3_low_building');
+      const tileW = sz ? (sz.w / sz.h) * h : 420;
       ctx.save();
-      ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-      SpriteLoader.blit(sprKey, x, y, w, h);
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      for (let tx = x; tx < x + w; tx += tileW) {
+        SpriteLoader.blit('l3_low_building', tx, y, tileW, h);
+      }
       ctx.restore();
     } else {
-      const colours = { red: '#8b2020', blue: '#1a3a8b', red_double: '#7a1a5a' };
-      ctx.fillStyle = colours[plat.variant] || '#5a5a5a';
+      ctx.fillStyle = '#7a7060';
       ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.fillRect(x, y, w, 4);
+      ctx.fillStyle = '#5a5040';
+      ctx.fillRect(x, y, w, 6);
+    }
+
+  } else if (type === 'two_storey') {
+    // Two-storey building — sprite fills collision box, roof at top = landing surface.
+    if (SpriteLoader.ready('l3_two_storey')) {
+      SpriteLoader.blit('l3_two_storey', x, y, w, h);
+    } else {
+      ctx.fillStyle = '#c8b88a';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#6b5030';
+      ctx.fillRect(x, y, w, 8);
     }
 
   } else if (currentLevel === 2) {
