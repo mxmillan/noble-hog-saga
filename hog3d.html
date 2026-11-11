@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Noble Hog Saga 3D — Tilting at Windmills</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#2a1606; --parch:#f1e2b8; --gold:#e8b23a; --hud:'Press Start 2P', monospace; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:#1a0a00; overflow:hidden; color:#fff; font-family:var(--hud); }
+    #c { position:fixed; inset:0; width:100%; height:100%; display:block; image-rendering:pixelated; cursor:grab; }
+    #c.drag { cursor:grabbing; }
+    [hidden] { display:none !important; }
+
+    #hud { position:fixed; inset:0; pointer-events:none; text-shadow:2px 2px 0 #000; font-size:clamp(9px,1.3vw,14px); }
+    #hud-tl { position:absolute; left:16px; top:14px; display:flex; flex-direction:column; gap:10px; }
+    #hearts { display:flex; gap:6px; }
+    #hearts i { width:28px; height:26px; background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M1 0h3v1h1V0h3v1h1v4H8v1H7v1H6v1H3V7H2V6H1V5H0V1h1z'/%3E%3Cpath fill='%23e5332a' d='M1 1h3v1h1V1h3v4H7v1H6v1H3V6H2V5H1z'/%3E%3Cpath fill='%23ff9a8f' d='M2 2h1v1H2z'/%3E%3C/svg%3E"); }
+    #hearts i.off { filter:grayscale(1) brightness(.45); }
+    #gas { display:flex; align-items:center; gap:8px; }
+    #gas .bar { width:150px; height:14px; border:3px solid #000; background:#243016; box-shadow:0 0 0 2px #fff3; }
+    #gasfill { display:block; height:100%; width:30%; background:linear-gradient(#b6f23c,#5fae12); }
+    #gas.low #gasfill { background:#7d8a6a; }
+    #hud-tr { position:absolute; right:16px; top:12px; display:flex; align-items:center; gap:10px; }
+    #hud-tr img { height:30px; image-rendering:pixelated; filter:drop-shadow(2px 2px 0 #000); }
+    #objective { position:absolute; left:50%; top:14px; transform:translateX(-50%); background:#000a; border:2px solid var(--gold); padding:8px 12px; color:#ffe9a8; white-space:nowrap; max-width:60vw; overflow:hidden; text-overflow:ellipsis; }
+    #compass { position:absolute; left:50%; top:54px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; color:#ffe9a8; }
+    #compass i { width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-bottom:22px solid var(--gold); filter:drop-shadow(2px 2px 0 #000); }
+    #hud.cine > :not(#toast) { visibility:hidden; }
+    #toast { position:absolute; left:50%; top:22%; transform:translateX(-50%); color:#fff7c2; font-size:clamp(11px,1.8vw,20px); opacity:0; transition:opacity .25s; text-align:center; }
+    #toast.on { opacity:1; }
+    #prompt { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); background:#000b; border:2px solid #fff; padding:8px 12px; }
+    #bark { position:absolute; left:50%; top:90px; transform:translateX(-50%); display:flex; gap:12px; align-items:center; max-width:min(680px,88vw);
+            background:var(--parch); color:var(--ink); text-shadow:none; border:3px solid var(--ink); box-shadow:4px 4px 0 #0008; padding:8px 14px; line-height:1.6; }
+    #bark img { height:54px; image-rendering:pixelated; }
+    #bark p { margin:0; }
+
+    #dialog { position:fixed; left:50%; bottom:5vh; transform:translateX(-50%); width:min(820px,92vw); display:flex; gap:18px; align-items:flex-end;
+              background:var(--parch); color:var(--ink); border:4px solid var(--ink); box-shadow:6px 6px 0 #0009, inset 0 0 0 3px #c9a35a; padding:16px 18px; }
+    #dialog img { height:120px; max-width:110px; object-fit:contain; image-rendering:pixelated; }
+    #dialog h3 { margin:0 0 8px; font-family:'UnifrakturMaguntia', serif; font-weight:400; font-size:26px; color:#7a2210; }
+    #dialog p { margin:0; min-height:4.8em; font-size:clamp(10px,1.25vw,13px); line-height:1.8; }
+    #dialog small { display:block; text-align:right; font-size:9px; opacity:.7; margin-top:6px; }
+
+    .screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; gap:4vw; padding:4vh 4vw; background:radial-gradient(#0000 20%, #000b 100%); }
+    .screen h1 { font-family:'UnifrakturMaguntia', serif; font-weight:400; font-size:clamp(34px,5.4vw,72px); margin:0 0 6px; color:#ffe3a0; text-shadow:3px 3px 0 #5a1d08, 6px 6px 0 #000; line-height:1; }
+    .screen h2 { font-size:clamp(10px,1.3vw,14px); margin:0 0 22px; color:#fff; text-shadow:2px 2px 0 #000; line-height:1.6; }
+    #title img.cover { height:min(74vh,620px); border:3px solid #000; box-shadow:10px 10px 0 #0008; transform:rotate(-3deg); }
+    .panel { max-width:560px; }
+    .keys { list-style:none; margin:0 0 22px; padding:14px 16px; background:#000a; border:2px solid var(--gold); font-size:clamp(8px,1vw,11px); line-height:2.2; text-shadow:none; }
+    .keys b { display:inline-block; min-width:9.5em; color:var(--gold); font-weight:400; }
+    .go { display:inline-block; pointer-events:auto; cursor:pointer; font-family:var(--hud); font-size:clamp(11px,1.5vw,16px); padding:14px 18px; color:var(--ink); background:var(--gold); border:3px solid #000; box-shadow:4px 4px 0 #000; animation:pulse 1s steps(2) infinite; }
+    .go[disabled] { animation:none; background:#8a7a55; cursor:default; }
+    @keyframes pulse { 50% { transform:translateY(-3px); box-shadow:4px 7px 0 #000; } }
+    .note { font-size:8px; opacity:.75; margin-top:16px; line-height:1.8; text-shadow:1px 1px 0 #000; }
+    #pause, #win { background:#000a; flex-direction:column; text-align:center; gap:10px; }
+    #pause .keys { text-align:left; }
+    /* The win card sits low so the hog and his Ring stay in view above it. */
+    #win { justify-content:flex-end; padding-bottom:5vh; background:linear-gradient(#0000 30%, #000c 75%); }
+    #win h1 { font-size:clamp(28px,4.4vw,58px); }
+    #win img { position:absolute; left:4vw; bottom:5vh; height:min(24vh,190px); image-rendering:pixelated; transform:rotate(-4deg); box-shadow:6px 6px 0 #0008; }
+    #win .stats { font-size:clamp(10px,1.3vw,14px); line-height:2.2; margin-bottom:18px; color:#ffe9a8; text-shadow:2px 2px 0 #000; }
+    #fade { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .25s; }
+    @media (max-width:820px) { #title img.cover { display:none; } }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hud" hidden>
+    <div id="hud-tl">
+      <div id="hearts"><i></i><i></i><i></i><i></i></div>
+      <div id="gas"><span>GAS</span><div class="bar"><i id="gasfill"></i></div></div>
+    </div>
+    <div id="objective"></div>
+    <div id="compass" hidden><i></i><span></span></div>
+    <div id="hud-tr"><img id="ringicon" alt="" hidden><img id="foodicon" alt=""><span id="food">0/0</span></div>
+    <div id="bark" hidden><img alt=""><p></p></div>
+    <div id="toast"></div>
+    <div id="prompt" hidden></div>
+  </div>
+
+  <div id="dialog" hidden>
+    <img id="dlg-portrait" alt="">
+    <div style="flex:1">
+      <h3 id="dlg-name"></h3>
+      <p id="dlg-text"></p>
+      <small>ENTER &gt;</small>
+    </div>
+  </div>
+
+  <div id="title" class="screen">
+    <img class="cover" src="assets/backgrounds/splash_screen.png" alt="The Hog Man Cometh — A Sacred Chronicle">
+    <div class="panel">
+      <h1>Tilting at Windmills</h1>
+      <h2>A Noble Hog Saga, in three whole dimensions</h2>
+      <ul class="keys">
+        <li><b>W A S D</b>Ride the hog</li>
+        <li><b>SPACE</b>Jump · again in mid-air for a gas boost</li>
+        <li><b>SHIFT / F</b>Hog charge (burns gas)</li>
+        <li><b>ARROWS / DRAG</b>Turn the camera · wheel zooms</li>
+        <li><b>E</b>Talk &nbsp; <b style="min-width:0">ESC</b> Pause &nbsp; <b style="min-width:0">M</b> Mute</li>
+      </ul>
+      <button id="start" class="go" disabled>LOADING…</button>
+      <p class="note">Gamepad works too: left stick, A to jump, X to charge.</p>
+    </div>
+  </div>
+
+  <div id="pause" class="screen" hidden>
+    <h1>Paused</h1>
+    <ul class="keys">
+      <li><b>W A S D</b>Ride the hog</li>
+      <li><b>SPACE</b>Jump · again in mid-air for a gas boost</li>
+      <li><b>SHIFT / F</b>Hog charge: breaks rocks, flattens crows</li>
+      <li><b>ARROWS / DRAG</b>Turn the camera · wheel zooms</li>
+      <li><b>E</b>Talk &nbsp; <b style="min-width:0">M</b> Mute</li>
+    </ul>
+    <h2>ESC to ride on</h2>
+  </div>
+
+  <div id="win" class="screen" hidden>
+    <img id="win-ring" alt="One Butch to rule them all">
+    <h1>The Ring is Reclaimed!</h1>
+    <div class="stats" id="win-stats"></div>
+    <button id="again" class="go">RIDE AGAIN</button>
+  </div>
+
+  <div id="fade"></div>
+  <script type="module" src="hog3d.js?v=3"></script>
+</body>
+</html>

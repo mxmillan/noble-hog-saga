@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Start The Noble Hog Saga and open it in a browser.
+#
+#   ./hogsaga              start, then open the game (The Hog Man Cometh)
+#   ./hogsaga --windmills  open the bonus level, Tilting at Windmills
+#   ./hogsaga --2d         open the original 2D platformer instead
+#   ./hogsaga --no-open    start without opening a browser
+#
+# Safe to run from anywhere; it finds its own directory. Ctrl-C stops the server.
+# Set PORT to use something other than 8137.
+
+set -euo pipefail
+
+PORT="${PORT:-8137}"
+PAGE="saga.html"
+OPEN_BROWSER=1
+
+for arg in "$@"; do
+  case "$arg" in
+    --windmills) PAGE="hog3d.html" ;;
+    --2d) PAGE="index.html" ;;
+    --no-open) OPEN_BROWSER=0 ;;
+    -h|--help) sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "hogsaga: unknown option '$arg'" >&2; exit 2 ;;
+  esac
+done
+
+cd "$(dirname "$0")"
+
+BASE_URL="http://localhost:$PORT"
+GAME_URL="$BASE_URL/$PAGE"
+
+open_game() {
+  [ "$OPEN_BROWSER" -eq 1 ] || return 0
+  if command -v open >/dev/null 2>&1; then
+    open "$GAME_URL"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$GAME_URL"
+  else
+    echo "Open $GAME_URL in your browser."
+  fi
+}
+
+# Is this game already being served on the port? (Checks the page title, so some
+# other project's server on the same port is not mistaken for it.)
+serving() {
+  curl -sf --max-time 2 "$BASE_URL/hog3d.html" 2>/dev/null | grep -q "Noble Hog Saga"
+}
+
+if serving; then
+  echo "The Hog Saga is already running at $GAME_URL"
+  open_game
+  exit 0
+fi
+
+if curl -s --max-time 2 -o /dev/null "$BASE_URL"; then
+  echo "hogsaga: port $PORT is in use by something else. Try: PORT=8138 ./hogsaga" >&2
+  exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "hogsaga: python3 is needed to serve the game (the 3D game cannot run from file://)." >&2
+  exit 1
+fi
+
+# Wait for the server before opening, so the browser is not greeted by an error page.
+(
+  for _ in $(seq 1 40); do
+    if serving; then
+      echo ""
+      echo "  The Hog Saga is up: $GAME_URL"
+      echo "  Ctrl-C to stop."
+      echo ""
+      open_game
+      exit 0
+    fi
+    sleep 0.25
+  done
+  echo "hogsaga: gave up waiting for the server to start." >&2
+) &
+
+# exec, so Ctrl-C reaches the server directly. Bound to localhost only, and with caching off:
+# the stock http.server lets browsers keep stale copies of the game's scripts after an edit.
+exec python3 -c '
+import http.server, sys
+class NoCache(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+    def log_message(self, *args):
+        pass
+http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), NoCache).serve_forever()
+' "$PORT"

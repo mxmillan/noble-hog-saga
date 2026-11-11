@@ -1,0 +1,7 @@
+# The source book is 197 MB: over GitHub's 100 MB file limit. The game uses the
+# exported pages in assets/book/ instead.
+TheHogManComethPt1.pdf
+
+# macOS and local tooling
+.DS_Store
+.claude/
