@@ -2,7 +2,7 @@
 // The game of the book: four chapters that follow its pages, which are shown as the story scenes.
 // This file is the engine (hog, camera, companion, foes, HUD, chapter loading). The chapters themselves
 // are data-and-build functions in saga-levels.js; the cast and props are in hog3d-models.js.
-// No build step: three.js is the vendored copy in vendor/, wired up by the import map in saga.html.
+// No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=4';
 import { LEVELS } from './saga-levels.js?v=1';

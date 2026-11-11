@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running the Game
 
-There is no build step. Open `index.html` directly in a browser (file:// or a local HTTP server). Everything runs in-browser via the Canvas API.
+There is no build step. **`index.html` is the 3D game of the book** (it needs an HTTP server; see below). The original 2D platformer described in the next sections is `classic.html`: open it directly in a browser (file:// or a local HTTP server). Everything runs in-browser via the Canvas API.
 
 ```bash
-# One command: serves the folder on localhost:8137 and opens the game of the book (saga.html)
+# One command: serves the folder on localhost:8137 and opens the game of the book (index.html, the root page)
 ./hogsaga            # --windmills for the bonus level, --2d for the original platformer, --no-open to skip the browser
 ```
 
@@ -227,7 +227,10 @@ Re-measure if any Gollum sprite is redrawn or re-cropped.
 - `getZone()`/`getZoneBlend()` were dead code, so the documented "zone boundary mismatch" never actually affected rendering. Both removed.
 - `lamp.png` is moot: no Magic Lamp exists anywhere in the code — no `PATHS` entry, no powerup, no collectible type. `powerups` is initialised empty and never read.
 
-## The game of the book — `saga.html` / `saga.js` / `saga-levels.js`
+## The game of the book — `index.html` / `saga.js` / `saga-levels.js`
+
+`index.html` is the game, so the site's root link opens it. `saga.html` is only a redirect, kept because
+that link was shared before the game moved to the root. The 2D platformer lives at `classic.html`.
 
 **This is the main game.** It follows the user's book, *The Hog Man Cometh, Part the First*
 (`TheHogManComethPt1.pdf`, 47 illuminated pages), which is the guide for the whole game. The book's
