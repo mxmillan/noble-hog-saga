@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>The Noble Hog Saga 3D — Tilting at Windmills</title>
+  <title>The Noble Hog Saga — Prologue: Tilting at Windmills</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -30,6 +30,10 @@
     #compass { position:absolute; left:50%; top:54px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; color:#ffe9a8; }
     #compass i { width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-bottom:22px solid var(--gold); filter:drop-shadow(2px 2px 0 #000); }
     #hud.cine > :not(#toast) { visibility:hidden; }
+    /* Scripted scenes get cinema bars. */
+    body::before, body::after { content:''; position:fixed; left:0; right:0; height:0; background:#000; z-index:2; pointer-events:none; transition:height .5s; }
+    body::before { top:0; } body::after { bottom:0; }
+    body.cine::before, body.cine::after { height:10vh; }
     #toast { position:absolute; left:50%; top:22%; transform:translateX(-50%); color:#fff7c2; font-size:clamp(11px,1.8vw,20px); opacity:0; transition:opacity .25s; text-align:center; }
     #toast.on { opacity:1; }
     #prompt { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); background:#000b; border:2px solid #fff; padding:8px 12px; }
@@ -56,13 +60,8 @@
     .go[disabled] { animation:none; background:#8a7a55; cursor:default; }
     @keyframes pulse { 50% { transform:translateY(-3px); box-shadow:4px 7px 0 #000; } }
     .note { font-size:8px; opacity:.75; margin-top:16px; line-height:1.8; text-shadow:1px 1px 0 #000; }
-    #pause, #win { background:#000a; flex-direction:column; text-align:center; gap:10px; }
+    #pause { background:#000a; flex-direction:column; text-align:center; gap:10px; }
     #pause .keys { text-align:left; }
-    /* The win card sits low so the hog and his Ring stay in view above it. */
-    #win { justify-content:flex-end; padding-bottom:5vh; background:linear-gradient(#0000 30%, #000c 75%); }
-    #win h1 { font-size:clamp(28px,4.4vw,58px); }
-    #win img { position:absolute; left:4vw; bottom:5vh; height:min(24vh,190px); image-rendering:pixelated; transform:rotate(-4deg); box-shadow:6px 6px 0 #0008; }
-    #win .stats { font-size:clamp(10px,1.3vw,14px); line-height:2.2; margin-bottom:18px; color:#ffe9a8; text-shadow:2px 2px 0 #000; }
     #fade { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .25s; }
     @media (max-width:820px) { #title img.cover { display:none; } }
   </style>
@@ -99,7 +98,7 @@
     <img class="cover" src="assets/backgrounds/splash_screen.png" alt="The Hog Man Cometh — A Sacred Chronicle">
     <div class="panel">
       <h1>Tilting at Windmills</h1>
-      <h2>A Noble Hog Saga, in three whole dimensions</h2>
+      <h2>The prologue: how the Hog Man came by his strange pet</h2>
       <ul class="keys">
         <li><b>W A S D</b>Ride the hog</li>
         <li><b>SPACE</b>Jump · again in mid-air for a gas boost</li>
@@ -124,14 +123,7 @@
     <h2>ESC to ride on</h2>
   </div>
 
-  <div id="win" class="screen" hidden>
-    <img id="win-ring" alt="One Butch to rule them all">
-    <h1>The Ring is Reclaimed!</h1>
-    <div class="stats" id="win-stats"></div>
-    <button id="again" class="go">RIDE AGAIN</button>
-  </div>
-
   <div id="fade"></div>
-  <script type="module" src="hog3d.js?v=3"></script>
+  <script type="module" src="hog3d.js?v=4"></script>
 </body>
 </html>

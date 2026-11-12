@@ -3,7 +3,7 @@
 # Start The Noble Hog Saga and open it in a browser.
 #
 #   ./hogsaga              start, then open the game (The Hog Man Cometh)
-#   ./hogsaga --windmills  open the bonus level, Tilting at Windmills
+#   ./hogsaga --windmills  open the prologue, Tilting at Windmills, on its own
 #   ./hogsaga --2d         open the original 2D platformer instead
 #   ./hogsaga --no-open    start without opening a browser
 #

@@ -8,7 +8,7 @@ There is no build step. **`index.html` is the 3D game of the book** (it needs an
 
 ```bash
 # One command: serves the folder on localhost:8137 and opens the game of the book (index.html, the root page)
-./hogsaga            # --windmills for the bonus level, --2d for the original platformer, --no-open to skip the browser
+./hogsaga            # --windmills for the prologue on its own, --2d for the original platformer, --no-open to skip the browser
 ```
 
 ```bash
@@ -244,15 +244,15 @@ not the pointy-hatted one. The villains are the wizard, the shield-maiden and th
 
 | Chapter | Book pages | What happens |
 |---|---|---|
-| 1 The Darkling Trail | 4–8 | Town and the wizard's warning; dark wood, fallen trunks, a ford; the Tile Troll at his pond (slams up close, hurls tiles at range); the wizard exiles him |
-| 2 The Cold Mountain | 9–16 | Snowballs down the valley; the bent tower and the slop bucket (the first always hits the Gollum Man); the icy pass (ice, wind, two chasms); the shield-maiden takes the Gollum Man |
-| 3 The Oasis | 17–27 | Alone at night; the tavern (sing "I said maybe" to the barkeep three times for a row of ales); the small square door; candlelit corridor (pillars, a drifting span, sinking stones); the shield-maiden in her lair |
-| 4 The White Castle | 28–47 | The WANTED parchment; the endless spiral and its barrels; the Lamp and the feast; the three villains in turn; catch the Gollum Man at the window; Juli's wings and a flight through rings |
+| 1 The Darkling Trail | 4–8 | Town and the wizard's warning; dark wood, fallen trunks, a ford; a bog of stepping stones (the mossy ones sink); a thorn bank climbed by a stair of logs; the Tile Troll at his pond (slams up close, hurls tiles at range); the wizard exiles him |
+| 2 The Cold Mountain | 9–16 | Snowballs down the valley; the bent tower and the slop bucket (the first always hits the Gollum Man); the icy pass (ice, wind, two chasms); a knife-edge with a drop on both sides and a third chasm; a last gully of snowballs; the shield-maiden takes the Gollum Man |
+| 3 The Oasis | 17–27 | Alone at night; the tavern (sing "I said maybe" to the barkeep three times for a row of ales); the small square door; candlelit corridor (narrow pillars, pillars, a drifting span, sinking stones); the shield-maiden in her lair; then the Gollum Man climbs up behind the rider and they dash out along a tunnel of sinking stones |
+| 4 The White Castle | 28–47 | A snowfield and a frozen river crossed on drifting floes; the WANTED parchment; the endless spiral and its barrels; the Lamp and the feast; the three villains in turn; catch the Gollum Man at the window; a scripted scene of Juli's wings growing and the leap from the window; a flight through sixteen rings |
 
 - **`saga.js` is the engine**: hog physics, camera, the companion, foes (`spawnTroll`, `spawnMaiden`,
   `spawnThrower`, `spawnCaster`, `spawnRollers`), HUD, pages/dialogue, chapter loading, the flight.
   Its generic sections (sound, input, collision, materials, particles) were lifted from `hog3d.js`;
-  the two files are now separate and `hog3d.js` is frozen as the bonus level.
+  the two files are now separate; `hog3d.js` is the prologue, a page of its own (see below).
 - **`saga-levels.js` is the chapters**: each is `{ bounds, cell, height, tint, ice?, start, ambience,
   build(E), begin(E) }`. `E` is the engine handle (see the `E` object near the end of `saga.js`).
   Ground is mostly a *trail* (`makeTrail`): `s` along it, `d` off to the right; `edge()` makes the
@@ -261,6 +261,17 @@ not the pointy-hatted one. The villains are the wizard, the shield-maiden and th
   Gollum Man, the leash and the HUD persist. Progress is the chapter reached (`localStorage`
   `hogSaga.chapter`, written in `beginLevel`, not `loadLevel` — the title's backdrop load must not
   overwrite it).
+- **The Gollum Man has three modes** (`E.gollum(on, { mode })`): `follow` (on the leash), `stay` (holds a pose
+  somewhere) and `ride` (up behind the rider: his model becomes a child of `hog.pillion`, see
+  `mountGollum`). The user asked that he ride from the moment the shield-maiden is beaten, so he rides
+  through the escape and all of chapter 4, getting down only for the window scene.
+- **Scripted scenes** are `E.cutscene({ dur, step(t, dt, cine), done })`: `step` places the hog through `P`,
+  sets `cine.wing / fly / run / pitch` for how he is drawn, and moves `E.camera` itself. ENTER skips to
+  the end. `LEVELS[3].wing()` plays the take-off scene directly, for testing. Place each camera so no
+  column or table sits between it and the hog: two of the first cut's angles were blocked.
+- **The rider is deliberately portly** (the book: "a portly fellow"; the user asked for him fatter).
+- **Older placements in chapter 4 are offset by `S4`**: the trail gained a first stretch, so inside
+  `build` `at(s)` means `T4.at(s + S4)`; new content there uses `T4.at` directly.
 - **Do not quote song lyrics.** The tavern joke is the book's own three words, "I said maybe".
 - **Dev:** `?dev` gives keys 1–4 (jump to chapter) and N (finish chapter); `?level=3` starts there.
   `window.SAGA` is the test handle (`level`, `warp`, `tick`, `hold`, `press`, `skip`, `look`), and
@@ -278,15 +289,39 @@ not the pointy-hatted one. The villains are the wizard, the shield-maiden and th
   - *Triggers are level-aware.* They fire only within 6 units of their own height, or a hog who has
     fallen off the pass finishes the chapter from underneath it.
   - *No wind at the chasms*, and it is announced 0.7 s before it bites.
+  - *Bots carry momentum too.* A bot that jumps the instant it lands flies past zig-zag stones; give it a
+    short pause before each hop (`pause` in the test `go()` helper) before deciding the level is at fault.
   - *Never append a `//` comment to the middle of a one-line statement with a patch.* It has
     silently commented out the rest of the line three times in this project; `node --check` on a
     `.mjs` copy catches it ("Unexpected strict mode reserved word").
 
-## The windmill level (bonus) — `hog3d.html` / `hog3d.js` / `hog3d-models.js`
+## The windmill level (the prologue) — `hog3d.html` / `hog3d.js` / `hog3d-models.js`
 
-The first 3D level built ("Tilting at Windmills"), before the book was the guide. Its story (the
-Gollum Man as a ring-thief) is not the book's, so it is kept as a bonus, linked from the saga's
-title screen. `hog3d-models.js` is shared: it holds the cast and props for both games.
+The first 3D level built ("Tilting at Windmills"), before the book was the guide. It is now the
+saga's prologue and tutorial: the origin of the Hog Man and Gollum Man team, which the book never
+tells. `hog3d-models.js` is shared: it holds the cast and props for both games.
+
+- **The two engines are joined by page navigation, not code.** NEW GAME in `saga.js`
+  (`startPrologue`) shows book page 2, then goes to `hog3d.html?saga`, which skips its own title.
+  Catching the Gollum Man and taking the ring back runs `win()`: a short dialogue (he bargains
+  with what he knows of the Lamp), then `bindScene()`, a scripted scene in the saga's style
+  (`startCine`/`stepCine`, cinema bars, ENTER skips): the hog rides a ring round him as three rope
+  loops appear, a leash runs from the rider's hand to his head, cut to the road and the pair
+  trotting to the city gate. It ends at `./?from=prologue`, where `boot()` in `saga.js` shows page
+  3 and begins chapter 1. SKIP THE PROLOGUE on the title runs pages 2 and 3 straight into
+  chapter 1. There is no win screen any more.
+- **Tutorial hints** are the `TIPS` list above `stepWorld`: each is a toast shown once, when its
+  test first passes (near the hay bales, first food, first crow, the river, the mossy stones, the
+  sails).
+- **Arriving by navigation loses the click that unlocks audio**, so both pages call `Sound.wake()`
+  on the first key or pointer press.
+- **Staging the tying-up:** the deck is a 3.2 to 10.5 ring with burgers floating at four angles.
+  `bindScene` hauls him to the nearest clear angle and ends the hog beside him, facing out; an
+  earlier version parked the hog between him and the camera. It also marks food on the road as
+  taken, or a taco floats in front of the hog for the whole ride.
+- **Driving the scene from a bot:** `HOG.bind()` starts it and `HOG.cine.t` is its clock, but the
+  page's own frame loop keeps running in real time and will finish the scene and leave the page.
+  Set `window.requestAnimationFrame = () => 0` first, then step with `HOG.tick`.
 
 - **Needs an HTTP server, but no network.** WebGL will not texture from `file://`.
   three.js r170 is vendored at `vendor/three.module.min.js` (MIT, unmodified from the npm

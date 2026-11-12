@@ -108,6 +108,7 @@ const Sound = (() => {
   return {
     init() { if (ac) return; ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.6;
       master.connect(ac.destination); nextT = ac.currentTime + 0.1; setInterval(music, 100); },
+    wake() { if (ac && ac.state === 'suspended') ac.resume(); },
     toggle() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.6; return muted; },
     jump() { tone(300, 0.16, 'square', 0.08, 620); },
     boost() { noise(0.45, 0.3, 900, 120); tone(140, 0.4, 'sawtooth', 0.07, 60); },
@@ -144,6 +145,7 @@ addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => { KEY[e.code] = false; });
+addEventListener('keydown', () => Sound.wake()); addEventListener('pointerdown', () => Sound.wake());
 addEventListener('blur', () => { for (const k in KEY) KEY[k] = false; });
 function readInput() {
   let x = (KEY.KeyD ? 1 : 0) - (KEY.KeyA ? 1 : 0), y = (KEY.KeyW ? 1 : 0) - (KEY.KeyS ? 1 : 0);
@@ -893,7 +895,7 @@ function frame(dt) {
   } else if (state === 'cine') { time += dt; stepCine(dt, HIT.Enter || HIT.Escape);
   } else if (state === 'title' || state === 'end') {
     time += dt; cam.yaw += dt * 0.1; cam.pitch = 0.3; cam.cur = cam.dist = 34; const [sx, sz] = world.level.start; cam.tgt.set(sx, groundBelow(sx, sz, 999) + 6, sz - 20); updateCamera(dt, false);
-    if (state === 'title' && (HIT.Enter || HIT.Space)) startGame(saved() > 0 ? saved() : 0);
+    if (state === 'title' && (HIT.Enter || HIT.Space)) { if (saved() > 0) startGame(saved()); else startPrologue(); }
   }
   updateVisuals(dt);
   renderer.render(scene, camera);
@@ -912,6 +914,13 @@ function startGame(i) {
   if (state !== 'title') return;
   Sound.init(); $('title').hidden = true; P.maxHp = 4; playTime = 0; deaths = 0; foodAll = 0;
   if (i === 0) { state = 'play'; pages([2, 3], () => beginLevel(0)); } else beginLevel(i);
+}
+// A new game opens with the book's first page, then the prologue (the windmill level, hog3d.html), which
+// tells how the Hog Man came by the Gollum Man and comes back here as ?from=prologue for chapter 1.
+function startPrologue() {
+  if (state !== 'title') return;
+  Sound.init(); $('title').hidden = true; state = 'play';
+  pages([2], () => { $('fade').style.opacity = 1; setTimeout(() => { location.href = 'hog3d.html?saga'; }, 320); });
 }
 function completeLevel() {
   if (P.frozen) return; const next = world.index + 1;
@@ -960,10 +969,13 @@ async function boot() {
   const lv = parseInt(new URLSearchParams(location.search).get('level') || '', 10);
   loadLevel(0); state = 'title';
   const cont = saved(); $('continue').hidden = cont === 0; if (cont > 0) $('continue').textContent = `CONTINUE — ${LEVELS[cont].title.toUpperCase()}`;
-  $('start').disabled = false; $('start').textContent = 'NEW GAME'; $('start').onclick = () => startGame(0); $('continue').onclick = () => startGame(cont);
+  $('start').disabled = false; $('start').textContent = 'NEW GAME'; $('start').onclick = startPrologue; $('skip').onclick = () => startGame(0); $('continue').onclick = () => startGame(cont);
   $('again').onclick = () => location.reload(); $('dialog').onclick = () => { if (state === 'dialog') advanceDialog(); }; $('book').onclick = () => { if (state === 'pages') turnPage(false); };
   requestAnimationFrame(loop);
   if (lv >= 1 && lv <= LEVELS.length) { Sound.init(); $('title').hidden = true; beginLevel(lv - 1); }
+  else if (new URLSearchParams(location.search).get('from') === 'prologue') {       // back from the prologue: the page that introduces the pair, then chapter 1
+    Sound.init(); $('title').hidden = true; state = 'play'; history.replaceState(null, '', './'); pages([3], () => beginLevel(0));
+  }
 }
 
 // Console/test handle. ?dev adds keys: 1–4 jump to a chapter, N finishes the current one.
