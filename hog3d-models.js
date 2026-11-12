@@ -76,13 +76,16 @@ export function buildHogman() {
   const skin = lam(0xe2b48c), hat = lam(0x8f6a2a), band = lam(0x5a3f18), shirt = lam(0xf6f1e6), wood = lam(0x7a5230);
   const rider = pivot(body, 0, 1.98, -0.12);
   for (const sx of [1, -1]) {
-    const l = limb(rider, sx * 0.52, 0.12, 0.05, 0.34, 0.8, 0.38, trouser); l.rotation.x = -0.55; l.rotation.z = sx * 0.38;
+    const l = limb(rider, sx * 0.6, 0.12, 0.05, 0.42, 0.8, 0.46, trouser); l.rotation.x = -0.55; l.rotation.z = sx * 0.42;
     add(l, B(0.37, 0.5, 0.42), boot, 0, -1.0, 0); add(l, B(0.37, 0.2, 0.3), boot, 0, -1.16, 0.3);
   }
-  add(rider, B(0.92, 1.02, 0.6), jacket, 0, 0.62, 0);
-  add(rider, B(0.28, 0.5, 0.06), shirt, 0, 0.86, 0.3);
-  add(rider, B(0.96, 0.12, 0.64), band, 0, 0.2, 0);
-  const arms = [1, -1].map(sx => { const a = limb(rider, sx * 0.58, 1.02, 0, 0.27, 0.82, 0.27, jacket); a.rotation.x = -1.0; a.rotation.z = -sx * 0.12; add(a, B(0.22, 0.2, 0.22), skin, 0, -0.9, 0); return a; });
+  // "A portly fellow": a barrel of a torso and a belly that rides out over the belt.
+  add(rider, B(1.24, 1.08, 0.9), jacket, 0, 0.64, 0.02);
+  add(rider, B(1.12, 0.7, 0.5), jacket, 0, 0.46, 0.56);
+  add(rider, B(0.9, 0.3, 0.36), jacket, 0, 0.88, 0.5);
+  add(rider, B(0.3, 0.4, 0.06), shirt, 0, 0.98, 0.69);
+  add(rider, B(1.28, 0.13, 0.94), band, 0, 0.16, 0.02);
+  const arms = [1, -1].map(sx => { const a = limb(rider, sx * 0.76, 1.04, 0.02, 0.33, 0.82, 0.33, jacket); a.rotation.x = -1.0; a.rotation.z = -sx * 0.16; add(a, B(0.22, 0.2, 0.22), skin, 0, -0.9, 0); return a; });
   const stick = add(arms[1], B(0.07, 0.07, 1.15), wood, 0, -0.9, 0.35); stick.rotation.x = 0.5;
   const rhead = pivot(rider, 0, 1.15, 0.02);
   const pal = { S: '#e2b48c', D: '#2c1d12', W: '#ffffff', K: '#111111', N: '#c9966c', M: '#7a2a20' };
@@ -104,7 +107,7 @@ export function buildHogman() {
   wingG.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(18), 2)); wingG.computeVertexNormals();
   const feather = lam(0xffffff, speckle(16, '#e8c98a', ['#d4b070', '#f4dca8', '#c9a060'], 50)); feather.side = THREE.DoubleSide;
   const wings = [1, -1].map(sx => { const w = pivot(body, sx * 0.62, 1.95, 0.35); add(w, wingG, feather).scale.x = sx; w.visible = false; return w; });
-  const pillion = pivot(body, 0, 1.98, -0.95);
+  const pillion = pivot(body, 0, 1.98, -1.12);
   return { g, body, head, tail, legs, rider, rhead, arms, gas, gasUp, wings, pillion, yaw: Math.PI, roll: 0 };
 }
 /** s: { dirX, dirZ, moving, grounded, vy, charge, boost, dead, anim, time, squash } */
@@ -115,7 +118,9 @@ export function animHogman(m, s, dt) {
   // Trot: diagonal pairs together. In the air, a full stretch.
   const sw = Math.sin(ph) * amp;
   const L = s.fly ? [-0.6, -0.6, 0.9, 0.9] : air ? [-0.85, -0.85, 0.8, 0.8] : s.dead ? [0.5, -0.3, 0.2, -0.5] : [sw, -sw, -sw, sw];
-  m.wings.forEach((w, i) => { w.visible = !!s.fly; w.rotation.z = (i ? -1 : 1) * (Math.sin(s.time * 8) * 0.55 + 0.2); });
+  // s.wing (0..1) lets the wings be seen growing before she flies.
+  const wing = s.wing ?? (s.fly ? 1 : 0);
+  m.wings.forEach((w, i) => { w.visible = wing > 0.01; w.scale.setScalar(Math.max(0.01, wing)); w.rotation.z = (i ? -1 : 1) * (Math.sin(s.time * 8) * 0.55 * (s.fly ? 1 : 0.35) + 0.2); });
   m.legs.forEach((l, i) => { l.rotation.x = ease(l.rotation.x, L[i], dt, 22); });
   m.body.position.y = ease(m.body.position.y, run || s.charge ? Math.abs(Math.sin(ph)) * 0.11 : Math.sin(s.time * 2.4) * 0.015, dt, 30);
   m.body.rotation.x = ease(m.body.rotation.x, air ? clamp(-s.vy * 0.02, -0.32, 0.32) : s.charge ? 0.07 : Math.sin(ph * 2) * 0.03 * amp, dt, 12);
@@ -143,6 +148,7 @@ const GOL_POSES = {
   gol_jump:   { y: 1.0, pitch: -0.5, head: -0.2, arm: [-2.0, -1.7], elbow: [-0.2, -0.2], leg: [0.55, 0.9], knee: [0.7, 0.4] },
   gol_hurt:   { y: 0.95, pitch: -1.2, head: 0.5, arm: [-2.9, -2.9], elbow: [-1.7, -1.7], leg: [-1.2, -1.2], knee: [2.3, 2.3] },
   gol_crouch: { y: 0.6, pitch: -0.3, head: 0.55, arm: [-0.9, -0.9], elbow: [-1.5, -1.5], leg: [-1.5, -1.5], knee: [2.35, 2.35] },
+  gol_ride:   { y: 0.95, pitch: -1.3, head: 0.15, arm: [-1.25, -1.25], elbow: [-0.5, -0.5], leg: [-1.2, -1.2], knee: [1.0, 1.0] },   // sat up behind the rider, arms round him
 };
 export function buildGollum() {
   const g = new THREE.Group(); g.rotation.order = 'YXZ';

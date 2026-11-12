@@ -30,6 +30,10 @@
     #compass { position:absolute; left:50%; top:54px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; color:#ffe9a8; }
     #compass i { width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-bottom:22px solid var(--gold); filter:drop-shadow(2px 2px 0 #000); }
     #hud.cine > :not(#toast) { visibility:hidden; }
+    /* Scripted scenes get cinema bars. */
+    body::before, body::after { content:''; position:fixed; left:0; right:0; height:0; background:#000; z-index:2; pointer-events:none; transition:height .5s; }
+    body::before { top:0; } body::after { bottom:0; }
+    body.cine::before, body.cine::after { height:10vh; }
     #toast { position:absolute; left:50%; top:22%; transform:translateX(-50%); color:#fff7c2; font-size:clamp(11px,1.8vw,20px); opacity:0; transition:opacity .25s; text-align:center; }
     #toast.on { opacity:1; }
     #prompt { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); background:#000b; border:2px solid #fff; padding:8px 12px; }

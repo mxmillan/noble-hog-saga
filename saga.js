@@ -281,6 +281,8 @@ const SKY = { top: '#9fd4f5', haze: '#dfeaf6' };
 // The Gollum Man: a companion on a leash, not a foe. mode 'follow' trots behind the hog; 'stay' holds a pose somewhere.
 const GOL = { on: false, mode: 'follow', x: 0, y: 0, z: 0, hx: 0, hz: -1, frame: 'gol_idle', cower: false, m: null, shadow: null, vy: 0 };
 const fly = { x: 0, y: 0, z: 0, yaw: Math.PI, pitch: 0, rings: [], got: 0, endZ: 0, done: null };
+// A scripted scene: step(t, dt, cine) places the hog (through P) and the camera itself, and sets how the hog is drawn.
+const cine = { t: 0, dur: 0, step: null, done: null, fly: false, wing: 0, pitch: 0, run: false };
 
 // ───────────────────────────── sky, light and weather ─────────────────────────────
 const amb = { t: null, fogC: new THREE.Color(), bgC: new THREE.Color() };
@@ -345,7 +347,7 @@ function loadLevel(i) {
   Object.assign(world, { items: [], crows: [], npcs: [], flags: [], triggers: [], tick: [], draw: [], rings: [], foodGot: 0, foodTotal: 0, target: null, windX: 0, windZ: 0, killY: -22, index: i });
   const L = world.level = LEVELS[i];
   buildGround(L); setAmbience(L.ambience, true);
-  GOL.on = false; GOL.mode = 'follow'; GOL.cower = false; nearNpc = null;
+  GOL.on = false; GOL.mode = 'follow'; GOL.cower = false; mountGollum(false); nearNpc = null;
   L.build(E);
   const [sx, sz, dx, dz] = L.start; P.x = sx; P.z = sz; P.y = groundBelow(sx, sz, 999); P.vx = P.vy = P.vz = 0; P.dirX = dx; P.dirZ = dz; P.hp = P.maxHp; P.fuel = Math.max(P.fuel, 0.45); P.dead = 0; P.inv = 0; P.charge = 0; P.frozen = false;
   checkpoint = { x: P.x, y: P.y, z: P.z }; lastSafe = { ...checkpoint }; P.gy = P.y;
@@ -494,8 +496,15 @@ function stepPlayer(dt) {
 }
 
 // ───────────────────────────── the Gollum Man, on his leash ─────────────────────────────
+// Up behind the rider, or back on his own feet. (Riding, his model is a child of the hog's.)
+function mountGollum(on) {
+  if (!GOL.m || on === !!GOL.riding) return; GOL.riding = on;
+  if (on) { hog.pillion.add(GOL.m.g); GOL.m.g.position.set(0, -0.95, 0.14); GOL.m.yaw = 0; } else scene.add(GOL.m.g);
+  GOL.m.g.rotation.set(0, 0, 0);
+}
 function stepGollum(dt) {
   const G = GOL; if (!G.on) return;
+  if (G.riding) { G.x = P.x; G.y = P.y; G.z = P.z; return; }
   if (G.mode === 'follow') {
     const tx = P.x - P.dirX * 3.6 + P.dirZ * 1.7, tz = P.z - P.dirZ * 3.6 - P.dirX * 1.7, dx = tx - G.x, dz = tz - G.z, d = Math.hypot(dx, dz);
     const lost = d > 26 || G.y < world.killY + 4 || Math.abs(G.y - P.y) > 9 && P.grounded;
@@ -510,9 +519,9 @@ function stepGollum(dt) {
 }
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 function drawGollum(dt) {
-  const G = GOL; G.m.g.visible = G.shadow.visible = G.on && !G.riding && state !== 'fly';
-  leash.visible = G.on && G.mode === 'follow' && !G.riding && state !== 'fly';
-  if (!G.on || G.riding) return;
+  const G = GOL; G.m.g.visible = G.on; G.shadow.visible = G.on && !G.riding; leash.visible = G.on && G.mode === 'follow' && !G.riding;
+  if (!G.on) return;
+  if (G.riding) { Models.animGollum(G.m, { frame: 'gol_ride', dirX: 0, dirZ: 1, time, shake: false }, dt); return; }
   Models.animGollum(G.m, { frame: G.frame, dirX: G.hx, dirZ: G.hz, time, shake: false }, dt);
   G.m.g.position.set(G.x, G.y, G.z); placeShadow(G.shadow, G.x, G.y, G.z);
   if (leash.visible) { hog.arms[0].getWorldPosition(_a); G.m.head.getWorldPosition(_b); _a.y -= 0.6; leash.position.copy(_a).lerp(_b, 0.5); leash.scale.z = _a.distanceTo(_b); leash.lookAt(_b); }
@@ -771,7 +780,7 @@ function spawnRollers(o) {
 function startFlight(o) {      // o: { x, y, z, rings: [[x, y, z]...], done }
   Object.assign(fly, { x: o.x, y: o.y, z: o.z, yaw: Math.PI, pitch: 0.1, got: 0, done: o.done, rings: o.rings.map(([x, y, z]) => { const m = Models.buildRingGate(); m.position.set(x, y, z); world.g.add(m); return { x, y, z, m, got: false }; }) });
   fly.endZ = o.rings[o.rings.length - 1][2] - 70; state = 'fly'; $('hud').classList.add('flying'); setObjective(`Fly!  Rings 0/${fly.rings.length}`, null); $('prompt').hidden = true;
-  hog.pillion.add(GOL.m.g); GOL.m.g.position.set(0, -0.75, 0); GOL.m.g.rotation.set(0, 0, 0); GOL.m.yaw = 0; GOL.riding = true; GOL.m.g.visible = true;
+  GOL.on = true; GOL.mode = 'ride'; mountGollum(true); cam.tgt.set(o.x, o.y + 2, o.z);
   toast('W / S climb and dive  ·  A / D bank', 5);
 }
 function stepFlight(dt) {
@@ -782,12 +791,21 @@ function stepFlight(dt) {
     r.m.rotation.z += dt * 0.8;
     if (!r.got && (pz - r.z) * (fly.z - r.z) <= 0 && Math.hypot(fly.x - r.x, fly.y + 1.5 - r.y) < 5.6) { r.got = true; fly.got++; r.m.visible = false; Sound.ring(); puff(r.x, r.y, r.z, 0xffe27a, 16, 9, 0.5, 0.7, 2); setObjective(`Fly!  Rings ${fly.got}/${fly.rings.length}`); }
   }
-  Models.animGollum(GOL.m, { frame: 'gol_idle', dirX: 0, dirZ: 1, time, shake: false }, dt); GOL.m.g.rotation.y = 0;
   Models.animHogman(hog, { dirX: Math.sin(fly.yaw), dirZ: Math.cos(fly.yaw), moving: true, grounded: false, vy: 0, charge: false, boost: 0, dead: false, anim: time, time, squash: 0, fly: true }, dt);
   hog.g.position.set(fly.x, fly.y, fly.z); hog.g.rotation.x = -fly.pitch; hog.g.rotation.z = input.x * -0.35; hog.g.visible = true; playerShadow.visible = false;
   const k = 1 - Math.exp(-6 * dt); cam.tgt.x = lerp(cam.tgt.x, fly.x, k); cam.tgt.y = lerp(cam.tgt.y, fly.y + 2, k); cam.tgt.z = lerp(cam.tgt.z, fly.z, k);
   camera.position.set(cam.tgt.x - Math.sin(fly.yaw) * 15, cam.tgt.y + 5, cam.tgt.z - Math.cos(fly.yaw) * 15); camera.lookAt(cam.tgt.x + dx * 8, cam.tgt.y + dy * 8, cam.tgt.z + dz * 8);
   if (fly.z < fly.endZ || HIT.KeyN && DEV) { state = 'play'; $('hud').classList.remove('flying'); const d = fly.done; fly.done = null; d(fly.got, fly.rings.length); }
+}
+
+// ───────────────────────────── scripted scenes ─────────────────────────────
+function startCine(o) {     // o: { dur, step(t, dt, cine), done() }. ENTER or ESC jumps to the end.
+  Object.assign(cine, { t: 0, dur: o.dur, step: o.step, done: o.done, fly: false, wing: 0, pitch: 0, run: false });
+  state = 'cine'; $('hud').classList.add('cine'); document.body.classList.add('cine'); $('prompt').hidden = true; $('bark').hidden = true; P.vx = P.vy = P.vz = 0; P.charge = 0;
+}
+function stepCine(dt, skip) {
+  cine.t = skip ? cine.dur : cine.t + dt; cine.step(Math.min(cine.t, cine.dur), dt, cine);
+  if (cine.t >= cine.dur) { state = 'play'; $('hud').classList.remove('cine'); document.body.classList.remove('cine'); const d = cine.done; cine.done = null; d(); }
 }
 
 // ───────────────────────────── camera ─────────────────────────────
@@ -824,7 +842,10 @@ canvas.addEventListener('wheel', e => { cam.dist = clamp(cam.dist + Math.sign(e.
 
 // ───────────────────────────── drawing ─────────────────────────────
 function updateVisuals(dt) {
-  if (state !== 'fly') {
+  if (state === 'cine') {
+    Models.animHogman(hog, { dirX: P.dirX, dirZ: P.dirZ, moving: cine.run, grounded: !cine.fly, vy: 0, charge: false, boost: 0, dead: false, anim: time, time, squash: 0, fly: cine.fly, wing: cine.wing }, dt);
+    hog.g.rotation.x = cine.pitch; hog.g.position.set(P.x, P.y, P.z); hog.g.visible = true; placeShadow(playerShadow, P.x, P.y, P.z);
+  } else if (state !== 'fly') {
     Models.animHogman(hog, { dirX: P.dirX, dirZ: P.dirZ, moving: Math.hypot(P.vx, P.vz) > 1.5, grounded: P.grounded, vy: P.vy, charge: P.charge > 0, boost: P.boostT, dead: P.dead > 0, anim: P.anim, time, squash: P.squash }, dt);
     hog.g.rotation.x = 0; hog.g.position.set(P.x, P.y + hog.lift, P.z);
     hog.g.visible = state === 'title' ? false : !(P.inv > 0 && P.dead <= 0 && Math.floor(time * 14) % 2);
@@ -869,6 +890,7 @@ function frame(dt) {
   } else if (state === 'dialog') { time += dt; tickDialog(dt); updateCamera(dt);
   } else if (state === 'pages') { time += dt; if (HIT.Enter || HIT.Space || HIT.KeyE) turnPage(false); else if (HIT.Escape) turnPage(true); if (state !== 'pages') updateCamera(dt);
   } else if (state === 'fly') { time += dt; stepFlight(dt);
+  } else if (state === 'cine') { time += dt; stepCine(dt, HIT.Enter || HIT.Escape);
   } else if (state === 'title' || state === 'end') {
     time += dt; cam.yaw += dt * 0.1; cam.pitch = 0.3; cam.cur = cam.dist = 34; const [sx, sz] = world.level.start; cam.tgt.set(sx, groundBelow(sx, sz, 999) + 6, sz - 20); updateCamera(dt, false);
     if (state === 'title' && (HIT.Enter || HIT.Space)) startGame(saved() > 0 ? saved() : 0);
@@ -903,7 +925,7 @@ function completeLevel() {
 
 // What a chapter is handed to build itself with.
 const E = {
-  THREE, Models, M, P, GOL, world, cam, lam, rep, mesh, makeShadow, puff, Sound,
+  THREE, Models, M, P, GOL, world, cam, camera, lam, rep, mesh, makeShadow, puff, Sound, cutscene: startCine,
   h: terrainH, ground: (x, z) => groundBelow(x, z, 999), addCyl, addBox, movers,
   put(m, x, z, yaw = 0, sink = 0.2) { m.position.set(x, groundBelow(x, z, 999) - sink, z); m.rotation.y = yaw; world.g.add(m); return m; },
   item: addItem, crow: addCrow, npc: addNpc, flag: addFlag, trigger: addTrigger,
@@ -914,7 +936,8 @@ const E = {
   troll: spawnTroll, maiden: spawnMaiden, thrower: spawnThrower, caster: spawnCaster, rollers: spawnRollers, actor, flight: startFlight,
   // indoors: look down over the walls rather than be squeezed against them
   teleport(x, z, dirX, dirZ, then, amb2, indoors) { fadeThen(() => { if (amb2) setAmbience(amb2, true); cam.pitch = indoors ? 0.82 : 0.34; cam.dist = cam.cur = indoors ? 12.5 : 15; P.x = x; P.z = z; P.y = groundBelow(x, z, 999); P.vx = P.vy = P.vz = 0; P.dirX = dirX; P.dirZ = dirZ; P.charge = 0; P.gy = P.y; cam.yaw = Math.atan2(-dirX, -dirZ); cam.tgt.set(P.x, P.y + 2.4, P.z); lastSafe = { x, y: P.y, z }; checkpoint = { ...lastSafe }; hog.yaw = Math.atan2(dirX, dirZ); if (then) then(); }, 450); },
-  gollum(on, o = {}) { GOL.on = on; GOL.riding = false; Object.assign(GOL, o); if (on && o.x !== undefined) GOL.y = groundBelow(o.x, o.z, 999); if (on && GOL.m.g.parent !== scene) { scene.add(GOL.m.g); GOL.m.g.rotation.set(0, 0, 0); } },
+  // o.mode: 'follow' (on the leash), 'stay' (holds a pose at o.x, o.z) or 'ride' (up behind the rider)
+  gollum(on, o = {}) { GOL.on = on; if (on && !o.mode) o.mode = 'follow'; Object.assign(GOL, o); mountGollum(on && GOL.mode === 'ride'); if (on && o.x !== undefined) GOL.y = groundBelow(o.x, o.z, 999); else if (on && GOL.mode === 'follow') { GOL.x = P.x - P.dirX * 2.5; GOL.z = P.z - P.dirZ * 2.5; GOL.y = P.y; } },
   flash(colour = '#fff', ms = 500) { const f = $('fade'); f.style.transition = 'none'; f.style.background = colour; f.style.opacity = 1; setTimeout(() => { f.style.transition = `opacity ${ms}ms`; f.style.opacity = 0; setTimeout(() => { f.style.background = '#000'; f.style.transition = ''; }, ms + 60); }, 60); },
   later(secs, fn) { const a = { t: secs, step(dt) { if (a.t > 0 && (a.t -= dt) <= 0) fn(); }, draw() {} }; world.tick.push(a); return a; },
   get time() { return time; }, get state() { return state; },
@@ -950,7 +973,7 @@ const SAGA = window.SAGA = {
   warp(x, z, y) { P.x = x; P.z = z; P.y = y ?? groundBelow(x, z, 999); P.vx = P.vy = P.vz = 0; cam.tgt.set(P.x, P.y + 2.4, P.z); },
   spy: null, look(x, y, z, yaw = 0, pitch = 0.2, dist = 7) { SAGA.spy = [x, y, z]; cam.yaw = yaw; cam.pitch = pitch; cam.dist = cam.cur = dist; },
   level(i) { Sound.init(); $('title').hidden = true; beginLevel(i); },
-  skip() { for (let k = 0; k < 60 && (state === 'dialog' || state === 'pages'); k++) { if (state === 'pages') turnPage(true); else advanceDialog(); } },
+  skip() { for (let k = 0; k < 60 && (state === 'dialog' || state === 'pages' || state === 'cine'); k++) { if (state === 'pages') turnPage(true); else if (state === 'cine') stepCine(0, true); else advanceDialog(); } },
   tick(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) frame(dt); },
   press(code) { HIT[code] = true; }, hold(code, on = true) { KEY[code] = on; },
 };

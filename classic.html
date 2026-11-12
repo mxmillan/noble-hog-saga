@@ -11,7 +11,11 @@
 </head>
 <body>
   <div id="ui">
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <!-- Sized to match the SPLASH state so the first frame doesn't resize.
+         game.js swaps the backing store per state via syncCanvasSize(). -->
+    <canvas id="gameCanvas" width="520" height="780">
+      This game needs a browser with HTML5 canvas support.
+    </canvas>
   </div>
   <script src="intro-text.js"></script>
   <script src="game.js"></script>

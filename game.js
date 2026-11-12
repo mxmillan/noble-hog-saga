@@ -28,6 +28,44 @@ const LEVEL_WIDTH       = 8500 + LEVEL_PREAMBLE;
 const BOSS_ARENA_LEFT   = 7100 + LEVEL_PREAMBLE; // world-x where arena locks behind player
 const GROUND_Y     = 420;    // fallback ground surface (Chunk 6 replaces with platforms)
 
+// --- Level 3 tower sprite metrics -------------------------------------------
+// Measured from the alpha channel of tower_obstacle.png (1024×637):
+//   y=53   first opaque pixel — the CHIMNEY TIP. Not a surface; anchoring the
+//          sprite by its bounding box is what made players float above the roof.
+//   y=132  content jumps to full width (268px) — the PARAPET, i.e. the roof
+//          surface the player actually stands on.
+//   y=622  last opaque pixel — the building base.
+//   x=388..652  the painted body; the rest of the PNG width is transparent.
+// Re-measure these if tower_obstacle.png is ever redrawn.
+const TOWER_PARAPET_FRAC   = 132 / 637;  // 0.2072 — sprite top edge → parapet
+const TOWER_BASE_FRAC      = 622 / 637;  // 0.9765 — sprite top edge → base
+const TOWER_BODY_LEFT_FRAC = 388 / 1024; // 0.3789 — sprite left edge → body left
+const TOWER_BODY_W_FRAC    = 264 / 1024; // 0.2578 — painted body width
+const TOWER_ASPECT         = 1024 / 637;
+const TOWER_BURY           = 22;         // px of base hidden beneath the street
+
+// --- Painted-content metrics for the other level 3 building sprites ---------
+// Every one of these PNGs has heavy transparent padding, so blitting them into
+// the collision box made the painted building far smaller than the box: players
+// stood ~38px above two-storey roofs and ~12px above carts, with tens of px of
+// invisible platform hanging off each side. Fractions of sprite width/height:
+//   surface — the landing surface (roof ridge / cart bed), skipping chimneys
+//   base    — bottom of the painted content
+//   left/right — horizontal extent of the painted content
+// Measured from the alpha channel; re-measure if the art is redrawn.
+const SPRITE_METRICS = {
+  l3_two_storey: { surface: 101 / 637, base: 622 / 637, left: 232 / 1024, right: 793 / 1024 },
+  l3_cart:       { surface: 150 / 637, base: 576 / 637, left:  96 / 1024, right: 835 / 1024 },
+};
+
+// Draw a sprite so its PAINTED content exactly fills (x, y, w, h) — i.e. the
+// collision box the player actually touches.
+function blitContentFit(key, x, y, w, h, m) {
+  const drawW = w / (m.right - m.left);
+  const drawH = h / (m.base - m.surface);
+  return SpriteLoader.blit(key, x - m.left * drawW, y - m.surface * drawH, drawW, drawH);
+}
+
 const camera = { x: 0, y: 0, shakeFrames: 0 };
 
 let player       = null;
@@ -46,15 +84,26 @@ let tacoRainTimer   = 0;    // countdown between boss-fight taco drops (Hogman o
 // ---------------------------------------------------------------------------
 const SoundManager = (() => {
   let ctx = null;
+  let master = null;   // master gain — every voice routes through this
+  let musicGain = null; // music sub-bus, ducked when the game is paused
   let musicNodes = []; // refs to keep music oscillators stoppable
+  let muted = false;
 
   function getCtx() {
     if (!ctx) {
-      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        master = ctx.createGain();
+        master.gain.setValueAtTime(muted ? 0 : 1, ctx.currentTime);
+        master.connect(ctx.destination);
+      } catch(e) {}
     }
     if (ctx && ctx.state === 'suspended') ctx.resume();
     return ctx;
   }
+
+  // Destination for one-shot SFX (master bus)
+  function out() { return master; }
 
   // Shared helper — plays a single tone burst
   function tone(freq, type, gainPeak, duration, startOffset = 0) {
@@ -62,7 +111,7 @@ const SoundManager = (() => {
     try {
       const osc  = ac.createOscillator();
       const gain = ac.createGain();
-      osc.connect(gain); gain.connect(ac.destination);
+      osc.connect(gain); gain.connect(out());
       osc.type = type;
       const t = ac.currentTime + startOffset;
       osc.frequency.setValueAtTime(freq, t);
@@ -84,7 +133,7 @@ const SoundManager = (() => {
       const ac = getCtx(); if (!ac) return;
       try {
         const osc = ac.createOscillator(), gain = ac.createGain();
-        osc.connect(gain); gain.connect(ac.destination);
+        osc.connect(gain); gain.connect(out());
         osc.type = 'sine';
         const t = ac.currentTime;
         osc.frequency.setValueAtTime(300, t);
@@ -100,7 +149,7 @@ const SoundManager = (() => {
       const ac = getCtx(); if (!ac) return;
       try {
         const osc = ac.createOscillator(), gain = ac.createGain();
-        osc.connect(gain); gain.connect(ac.destination);
+        osc.connect(gain); gain.connect(out());
         osc.type = 'sine';
         const t = ac.currentTime;
         osc.frequency.setValueAtTime(523, t);
@@ -116,7 +165,7 @@ const SoundManager = (() => {
       const ac = getCtx(); if (!ac) return;
       try {
         const osc = ac.createOscillator(), gain = ac.createGain();
-        osc.connect(gain); gain.connect(ac.destination);
+        osc.connect(gain); gain.connect(out());
         osc.type = 'sawtooth';
         const t = ac.currentTime;
         osc.frequency.setValueAtTime(120, t);
@@ -132,7 +181,7 @@ const SoundManager = (() => {
       const ac = getCtx(); if (!ac) return;
       try {
         const osc = ac.createOscillator(), gain = ac.createGain();
-        osc.connect(gain); gain.connect(ac.destination);
+        osc.connect(gain); gain.connect(out());
         osc.type = 'square';
         const t = ac.currentTime;
         osc.frequency.setValueAtTime(400, t);
@@ -149,7 +198,7 @@ const SoundManager = (() => {
       try {
         const osc  = ac.createOscillator();
         const gain = ac.createGain();
-        osc.connect(gain); gain.connect(ac.destination);
+        osc.connect(gain); gain.connect(out());
         osc.type = 'sawtooth';
         const t = ac.currentTime;
         osc.frequency.setValueAtTime(200, t);
@@ -189,10 +238,15 @@ const SoundManager = (() => {
       const ac = getCtx(); if (!ac) return;
       if (musicNodes.length) return; // already playing
       try {
+        // Music sub-bus — lets the whole track duck independently of SFX
+        musicGain = ac.createGain();
+        musicGain.gain.setValueAtTime(1, ac.currentTime);
+        musicGain.connect(out());
+
         // Bass drone (low sine, very quiet)
         const droneOsc  = ac.createOscillator();
         const droneGain = ac.createGain();
-        droneOsc.connect(droneGain); droneGain.connect(ac.destination);
+        droneOsc.connect(droneGain); droneGain.connect(musicGain);
         droneOsc.type = 'sine';
         droneOsc.frequency.setValueAtTime(82.4, ac.currentTime); // E2
         droneGain.gain.setValueAtTime(0.06, ac.currentTime);
@@ -202,7 +256,7 @@ const SoundManager = (() => {
         // Mid drone (fifth above, very quiet)
         const mid  = ac.createOscillator();
         const midG = ac.createGain();
-        mid.connect(midG); midG.connect(ac.destination);
+        mid.connect(midG); midG.connect(musicGain);
         mid.type = 'triangle';
         mid.frequency.setValueAtTime(123.5, ac.currentTime); // B2
         midG.gain.setValueAtTime(0.04, ac.currentTime);
@@ -212,12 +266,24 @@ const SoundManager = (() => {
         // Simple repeating melody using scheduled notes
         const melody = [330, 370, 392, 440, 392, 370, 330, 294]; // E4 F#4 G4 A4...
         const melGain = ac.createGain();
-        melGain.connect(ac.destination);
+        melGain.connect(musicGain);
         melGain.gain.setValueAtTime(0.07, ac.currentTime);
 
         const noteLen = 0.55;
         const totalLen = melody.length * noteLen;
         let loopCount = 0;
+
+        // Melody oscillators are one-shot: they self-destruct at note end.
+        // Without pruning, musicNodes grew by 9 entries every loop forever.
+        function keep(node) {
+          musicNodes.push(node);
+          if (node.addEventListener) {
+            node.addEventListener('ended', () => {
+              const i = musicNodes.indexOf(node);
+              if (i !== -1) musicNodes.splice(i, 1);
+            });
+          }
+        }
 
         function scheduleLoop() {
           const loopStart = ac.currentTime + (loopCount === 0 ? 0.5 : 0);
@@ -229,13 +295,15 @@ const SoundManager = (() => {
             osc.frequency.setValueAtTime(freq, t);
             osc.start(t);
             osc.stop(t + noteLen * 0.8);
-            musicNodes.push(osc);
+            keep(osc);
           });
           loopCount++;
           // Schedule next loop just before this one ends
           const nextAt = (loopStart + totalLen - 0.1) * 1000 - ac.currentTime * 1000;
           const timerId = setTimeout(scheduleLoop, Math.max(nextAt, 100));
-          musicNodes.push({ stop: () => clearTimeout(timerId) });
+          // Replace the previous loop's timer handle rather than stacking them
+          musicNodes = musicNodes.filter(n => !n._isLoopTimer);
+          musicNodes.push({ _isLoopTimer: true, stop: () => clearTimeout(timerId) });
         }
 
         scheduleLoop();
@@ -245,6 +313,30 @@ const SoundManager = (() => {
     stopMusic() {
       musicNodes.forEach(n => { try { n.stop(); } catch(e) {} });
       musicNodes = [];
+      musicGain = null;
+    },
+
+    // Duck the music while paused instead of tearing the whole track down
+    setMusicDucked(ducked) {
+      const ac = ctx;
+      if (!ac || !musicGain) return;
+      try {
+        musicGain.gain.cancelScheduledValues(ac.currentTime);
+        musicGain.gain.setTargetAtTime(ducked ? 0.15 : 1, ac.currentTime, 0.08);
+      } catch(e) {}
+    },
+
+    isMuted() { return muted; },
+
+    toggleMute() {
+      muted = !muted;
+      if (master && ctx) {
+        try {
+          master.gain.cancelScheduledValues(ctx.currentTime);
+          master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+        } catch(e) {}
+      }
+      return muted;
     },
   };
 })();
@@ -275,7 +367,6 @@ const SpriteLoader = (() => {
     burrito:       'assets/sprites/collectibles/burrito.png',
     one_ring:      'assets/sprites/collectibles/one_ring.png',
     one_ring_text: 'assets/sprites/collectibles/one_ring_text.png',
-    background_1:      'assets/backgrounds/level1_bg.png',
     splash_screen:     'assets/backgrounds/splash_screen.png',
     character_screen:  'assets/backgrounds/character_screen.png',
     intro_screen:      'assets/backgrounds/intro_screen.png',
@@ -338,9 +429,21 @@ const SpriteLoader = (() => {
 
 // ---------------------------------------------------------------------------
 // Timing
+//
+// All gameplay physics is written in per-frame units assuming 60fps
+// (GRAVITY = 0.5 px/frame², speed = 3 px/frame, …). requestAnimationFrame runs
+// at the display refresh rate, so on a 120Hz ProMotion display the whole game
+// ran at literally double speed. The loop now accumulates real time and steps
+// the simulation a whole number of times at exactly 1/60s, leaving the drawing
+// to run once per animation frame at whatever rate the display offers.
 // ---------------------------------------------------------------------------
 let lastTime = 0;
-let elapsed = 0; // total seconds since start — drives animations
+let elapsed = 0;  // total seconds since start — drives time-based animations
+let frameDt = 0;  // real seconds elapsed this animation frame (draw-side use)
+
+const FIXED_DT          = 1 / 60; // seconds per simulation step
+const MAX_CATCHUP_STEPS = 5;      // cap so a stalled tab can't spiral
+let accumulator = 0;
 
 // ---------------------------------------------------------------------------
 // Input
@@ -348,17 +451,36 @@ let elapsed = 0; // total seconds since start — drives animations
 const keys = {};
 const justPressed = {};
 
+// Keys the game consumes — swallowed so they don't scroll the page or
+// trigger browser shortcuts while playing.
+const GAME_KEYS = new Set([
+  'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+  'Space', 'Enter', 'Escape', 'KeyF', 'KeyM',
+]);
+
 window.addEventListener('keydown', (e) => {
+  if (GAME_KEYS.has(e.code)) e.preventDefault();
   if (!keys[e.code]) justPressed[e.code] = true;
   keys[e.code] = true;
 });
 window.addEventListener('keyup', (e) => {
+  if (GAME_KEYS.has(e.code)) e.preventDefault();
   keys[e.code] = false;
 });
 
-// Click / tap advances the intro screen or confirms character select
+// Alt-tabbing away while holding a key never delivers the keyup, which left the
+// player sprinting into a wall on return. Drop all held keys when focus is lost.
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+  clearJustPressed();
+});
+
+// Click / tap advances the menu screens
 canvas.addEventListener('pointerdown', () => {
-  if (state === 'INTRO' || state === 'CHARACTER_SELECT') justPressed['Enter'] = true;
+  if (state === 'SPLASH' || state === 'INTRO' || state === 'CHARACTER_SELECT' ||
+      state === 'LEVEL_COMPLETE') {
+    justPressed['Enter'] = true;
+  }
 });
 
 function clearJustPressed() {
@@ -816,9 +938,15 @@ function initLevel(level = 1) {
   currentLevel = level;
   const isHogman = gameState.selectedCharacter === 'hogman';
 
+  const spawnY = groundSurfaceY() - (isHogman ? 80 : 30);
+
   player = {
     x:          80,
-    y:          GROUND_Y - (isHogman ? 80 : 30),
+    y:          spawnY,
+    // Last solid ground stood on — pit falls respawn here instead of the
+    // level start, which mattered a lot on level 2's 7000px pit gauntlet.
+    checkpointX: 80,
+    checkpointY: spawnY,
     vx:         0,
     vy:         0,
     width:      isHogman ? 70  : 50,
@@ -904,8 +1032,19 @@ function initLevel(level = 1) {
       {x: 6790, y: 293, type: 'taco',    collected: false}, // plat 11
     ];
 
-    // CHUNK 8 — Level 2 enemies (none for now)
-    enemies = [];
+    // CHUNK 8 — Level 2 enemies.
+    // Crows hover at chest height over alternating platform surfaces, so the
+    // player arriving from a jump can stomp them on landing (or charge through
+    // as Hogman / sneak past crouched as Gollum). Every other platform is left
+    // clear so the pit gauntlet still has breathing room.
+    // [x, y, patrolRange] — y ≈ platform top − 50; patrol stays inside the platform.
+    enemies = makeCrows([
+      [1100, 220, 300], // plat 2  (x 1050–1470, top 270)
+      [2350, 280, 340], // plat 4  (x 2300–2740, top 330)
+      [3600, 200, 320], // plat 6  (x 3550–3970, top 250)
+      [4800, 205, 340], // plat 8  (x 4750–5190, top 255)
+      [6050, 175, 320], // plat 10 (x 6000–6420, top 225)
+    ]);
 
     boss = null;
 
@@ -915,27 +1054,32 @@ function initLevel(level = 1) {
     // Core mechanic: 4 tower_wall obstacles of increasing height block the path.
     // Player bounces off awning jump pads to clear each tower.
     //
-    // Tower tops (y):  T1=310  T2=255  T3=205  T4=165
-    // Awning bounce:   feet peak at awningY - 203
+    // Street surface is y=470. Tower tops:  T1=162  T2=158  T3=154  T4=148
     //
-    // side:'left'  → bracket on right, fabric left  (approach side, default)
-    // side:'right' → bracket on left, fabric right  (mirrored; visual variety)
-    // sprScale     → optional visual scale multiplier (hitbox unchanged)
+    // Bounce maths: an awning sets vy = -bounceForce and clears jumpHeld, so the
+    // variable-jump damping never applies and the rise is exactly
+    //   v² / (2 · GRAVITY) = 17² / 1 = 289px
+    // Each awning's hitbox y minus 289 must therefore clear its tower top —
+    // the per-tower comments below check this.
+    //
+    // Reachability floor: Hogman's held jump rises only ~87px (feet 470 → ~383),
+    // so an awning hitbox must stay at y ≳ 400 or he cannot reach it from the
+    // street. Making an awning "higher" means standing on the canopy top via
+    // drawOffsetY, NOT raising the hitbox.
+    //
+    // Per-awning tuning fields (all DRAW-ONLY — the hitbox is never moved):
+    //   side:'left'  → bracket on right, fabric left  (approach side, default)
+    //   side:'right' → bracket on left, fabric right  (mirrored; visual variety)
+    //   sprScale     → visual scale multiplier
+    //   wallOffset   → slides the canopy right to tuck under the tower's VISIBLE
+    //                  left face; the tower sprite fills only the middle ~28% of
+    //                  its PNG and each tower is a different width, so this is
+    //                  per-tower rather than one shared constant
+    //   drawOffsetY  → NEGATIVE lowers the canopy so its TOP surface meets the
+    //                  bounce hitbox and the player stands on the canopy rather
+    //                  than its drooping lower lip
     //
     // All raw x values get +LEVEL_PREAMBLE offset at end of initLevel().
-
-    // Towers match background building scale (~290-310px tall).
-    // bounceForce:16 → bounce height 256px, clearing all towers from ground-level awnings.
-    // drawOffsetY pushes the awning sprite up the tower face so it sits visually ~halfway up.
-    //
-    // Visual halfway formula: sprite sits at towerTop + towerHeight/2
-    //   sprite drawY (without offset) = awningY - 55
-    //   drawOffsetY = awningY - 55 - (towerTop + towerHeight/2)
-    //
-    // T1: awningY=418, towerTop=178, h=292 → midpoint=324 → drawOffsetY = 418-55-324 = 39
-    // T2: awningY=412, towerTop=174, h=296 → midpoint=322 → drawOffsetY = 412-55-322 = 35
-    // T3: awningY=406, towerTop=170, h=300 → midpoint=320 → drawOffsetY = 406-55-320 = 31
-    // T4: awningY=400, towerTop=165, h=305 → midpoint=317 → drawOffsetY = 400-55-317 = 28
     platforms = [
       // Continuous cobblestone ground
       {x: 0, y: 470, width: LEVEL_WIDTH, height: 80, type: 'ground'},
@@ -944,37 +1088,47 @@ function initLevel(level = 1) {
       {x: 700,  y: 420, width: 95,  height: 50,  type: 'cart'},
 
       // ── LOW BUILDING + TWO-STOREY drawn first so towers render on top ─────
-      {x: 1548, y: 355, width: 1212, height: 115, type: 'low_building'},
+      // Right edge lands at world 3940 — just inside where T2's wall clamps the
+      // player (4014 − Hogman's 70px width = 3944), so a player running the roof
+      // runs OFF the end instead of being pinned on it. At the original 1212 the
+      // roof reached 3960 and both characters got permanently stuck: unable to
+      // fall off, with T2's awning 57px BELOW them. Level 3 was uncompletable.
+      //
+      // 3940 also butts against T2's awning canopy (painted 3937→4033), so the
+      // building, canopy and tower read as one connected block with no gap.
+      // Do not shrink this further (reopens the gap) or grow it past 3944
+      // (restores the dead end).
+      {x: 1548, y: 355, width: 1192, height: 115, type: 'low_building'},
       {x: 2080, y: 230, width: 250, height: 240, type: 'two_storey'},
 
       // ── TOWER 1 ──────────────────────────────────────────────────────────
-      {x: 1400, y: 162, width: 185, height: 308, type: 'tower_wall'},
-      {x: 1310, y: 405, width: 90, height: 14, type: 'awning', side: 'left',
-       bounceForce: 17, drawOffsetY: 10, wallOffset: 110},
-      // bounceForce:17 → height 289px. Peak: 405-289=116 < 162 ✓
+      {x: 1410, y: 162, width: 178, height: 308, type: 'tower_wall'},
+      {x: 1332, y: 405, width: 68, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: -40, wallOffset: 45},
+      // Peak: 405-289=116 < 162 ✓  (base sprite size lives in drawPlatform)
 
       // ── TOWER 2 ──────────────────────────────────────────────────────────
-      {x: 2800, y: 158, width: 195, height: 312, type: 'tower_wall'},
-      {x: 2625, y: 412, width: 92, height: 14, type: 'awning', side: 'left',
-       bounceForce: 17, drawOffsetY: 40, wallOffset: 110},
+      {x: 2814, y: 158, width: 180, height: 312, type: 'tower_wall'},
+      {x: 2737, y: 412, width: 67, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: -40, wallOffset: 46},
       // Peak: 412-289=123 < 158 ✓
 
       // ── TWO-STOREY BUILDING (between T2 and T3) ──────────────────────────
       {x: 3200, y: 230, width: 250, height: 240, type: 'two_storey'},
 
       // ── TOWER 3 ──────────────────────────────────────────────────────────
-      {x: 4300, y: 154, width: 205, height: 316, type: 'tower_wall'},
-      {x: 4120, y: 406, width: 95, height: 14, type: 'awning', side: 'left',
-       bounceForce: 17, drawOffsetY: 38, wallOffset: 110},
+      {x: 4318, y: 154, width: 182, height: 316, type: 'tower_wall'},
+      {x: 4241, y: 406, width: 67, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: -40, wallOffset: 46},
       // Peak: 406-289=117 < 154 ✓
 
       // ── CART 2 (between T3 and T4) ───────────────────────────────────────
       {x: 4750, y: 420, width: 95,  height: 50,  type: 'cart'},
 
       // ── TOWER 4 — tallest ────────────────────────────────────────────────
-      {x: 5900, y: 148, width: 215, height: 322, type: 'tower_wall'},
-      {x: 5710, y: 400, width: 100, height: 14, type: 'awning', side: 'left',
-       bounceForce: 17, drawOffsetY: 36, wallOffset: 110, sprScale: 1.1},
+      {x: 5920, y: 148, width: 185, height: 322, type: 'tower_wall'},
+      {x: 5836, y: 400, width: 74, height: 14, type: 'awning', side: 'left',
+       bounceForce: 17, drawOffsetY: -45, wallOffset: 50, sprScale: 1.1},
       // Peak: 400-289=111 < 148 ✓
 
       // ── TWO-STOREY 2 (after T4) ───────────────────────────────────────────
@@ -991,11 +1145,13 @@ function initLevel(level = 1) {
       {x: 2895, y: 136, type: 'taco',    collected: false}, // T2 top
       {x: 4400, y: 132, type: 'taco',    collected: false}, // T3 top
       {x: 6005, y: 126, type: 'taco',    collected: false}, // T4 top
-      // ── Burritos at bounce apex — very high, hard to collect ─────────────
-      {x: 1275, y:  85, type: 'burrito', collected: false}, // T1 apex
-      {x: 2670, y:  79, type: 'burrito', collected: false}, // T2 apex
-      {x: 4165, y:  73, type: 'burrito', collected: false}, // T3 apex
-      {x: 5755, y:  67, type: 'burrito', collected: false}, // T4 apex
+      // ── Burritos on rooftops / cart between towers (extra life each) ──────
+      // Reseated off the old "bounce apex" sky positions so nothing floats in
+      // open air; each now rests on a real platform surface (22px above top).
+      {x: 2205, y: 208, type: 'burrito', collected: false}, // two-storey roof after T1
+      {x: 3325, y: 208, type: 'burrito', collected: false}, // two-storey roof between T2/T3
+      {x: 4797, y: 398, type: 'burrito', collected: false}, // cart 2 between T3/T4
+      {x: 6475, y: 208, type: 'burrito', collected: false}, // two-storey roof after T4
       // ── Ground tacos between towers ───────────────────────────────────────
       {x: 2100, y: 448, type: 'taco',    collected: false},
       {x: 3500, y: 448, type: 'taco',    collected: false},
@@ -1004,7 +1160,18 @@ function initLevel(level = 1) {
       {x: 7400, y: 448, type: 'taco',    collected: false},
     ];
 
-    enemies = [];
+    // Level 3 enemies — street crows at chest height (street surface y=470,
+    // so y=390 puts them squarely in a standing player's path, matching the
+    // level 1 crow feel). Placed only in open street stretches: clear of the
+    // four towers, both carts, the low building (1548–2760) and every
+    // two-storey block, so nothing spawns inside geometry.
+    enemies = makeCrows([
+      [ 900, 390, 250], // approach to T1
+      [3600, 390, 300], // between T2 and T3
+      [5100, 390, 320], // between T3 and T4
+      [6800, 390, 300], // after T4
+      [7500, 390, 300], // final run-out
+    ]);
     boss = null;
 
   } else {
@@ -1061,25 +1228,17 @@ function initLevel(level = 1) {
 
     // CHUNK 8 — Enemies: one crow per inter-platform gap, patrolling mid-air only.
     // x values are pre-LEVEL_PREAMBLE; +1200 is applied below. Gap extents listed for reference.
-    const ENEMY_DEFS = [
-      {x:  850, y: 340, type: 'crow', patrolRange: 250}, // gap 1: 2000→2350
-      {x: 1500, y: 330, type: 'crow', patrolRange: 220}, // gap 2: 2650→2980
-      {x: 2080, y: 335, type: 'crow', patrolRange: 150}, // gap 3: 3260→3500
-      {x: 2650, y: 340, type: 'crow', patrolRange: 340}, // gap 4: 3820→4250
-      {x: 3380, y: 335, type: 'crow', patrolRange: 360}, // gap 5: 4550→5000
-      {x: 4110, y: 330, type: 'crow', patrolRange: 280}, // gap 6: 5280→5650
-      {x: 4800, y: 340, type: 'crow', patrolRange: 390}, // gap 7: 5970→6450
-      {x: 5580, y: 335, type: 'crow', patrolRange: 310}, // gap 8: 6750→7150
-    ];
-    enemies = ENEMY_DEFS.map(def => ({
-      ...def,
-      startX: def.x,
-      dir:    1,
-      alive:  true,
-      width:  56,
-      height: 42,
-      speed:  2.0,
-    }));
+    // [x, y, patrolRange] — gap extents listed for reference
+    enemies = makeCrows([
+      [ 850, 340, 250], // gap 1: 2000→2350
+      [1500, 330, 220], // gap 2: 2650→2980
+      [2080, 335, 150], // gap 3: 3260→3500
+      [2650, 340, 340], // gap 4: 3820→4250
+      [3380, 335, 360], // gap 5: 4550→5000
+      [4110, 330, 280], // gap 6: 5280→5650
+      [4800, 340, 390], // gap 7: 5970→6450
+      [5580, 335, 310], // gap 8: 6750→7150
+    ]);
 
     initBoss();
   }
@@ -1095,6 +1254,48 @@ function initLevel(level = 1) {
   platforms.forEach(p => { if (p.type !== 'ground') p.x += LEVEL_PREAMBLE; });
   collectibles.forEach(c => c.x += LEVEL_PREAMBLE);
   enemies.forEach(e => { e.x += LEVEL_PREAMBLE; e.startX += LEVEL_PREAMBLE; });
+}
+
+// Build patrolling crow enemies from compact [x, y, patrolRange] defs.
+// x is pre-LEVEL_PREAMBLE; the offset is applied at the end of initLevel().
+function makeCrows(defs) {
+  return defs.map(([x, y, patrolRange]) => ({
+    x, y, patrolRange,
+    type:   'crow',
+    startX: x,
+    dir:    1,
+    alive:  true,
+    width:  56,
+    height: 42,
+    speed:  2.0,
+  }));
+}
+
+// Surface y of the walkable floor for the active level.
+// GROUND_Y (420) is the level 1/2 street; level 3's cobbles sit 50px lower.
+function groundSurfaceY() {
+  return currentLevel === 3 ? 470 : GROUND_Y;
+}
+
+// Single entry point for every source of damage (enemy, boss, beam, pit).
+// Returns true if the hit landed. Previously this block was duplicated four
+// times, and the copies had already drifted apart.
+function damagePlayer({ invincibleFor = 2.0, shake = 20, ignoreIFrames = false } = {}) {
+  if (!player || player.dying) return false;
+  if (!ignoreIFrames && (player.invincibleTimer > 0 || player.ringTimer > 0)) return false;
+
+  player.lives--;
+  player.invincibleTimer = invincibleFor;
+  SoundManager.playHit();
+  camera.shakeFrames = shake;
+
+  if (player.lives <= 0) {
+    SoundManager.stopMusic();
+    player.dying = true;
+    player.vy    = -8;
+    player.vx    = 0;
+  }
+  return true;
 }
 
 // Physics & controls — called every frame in PLAYING state
@@ -1117,11 +1318,15 @@ function updatePlayer() {
     // Falling — heavier gravity for a fast crumple feel
     player.vy = Math.min(player.vy + 0.9, TERMINAL_VEL * 1.5);
     player.y += player.vy;
-    // Land on ground and start rest timer
-    if (player.y + player.height >= GROUND_Y) {
-      player.y = GROUND_Y - player.height;
+    // Land on the floor of the active level and start the rest timer
+    const floorY = groundSurfaceY();
+    if (player.y + player.height >= floorY) {
+      player.y = floorY - player.height;
       player.vy = 0;
       player.deathRestTimer = 1.5;
+    } else if (player.y > canvas.height + 200) {
+      // Died over a pit — no floor to land on, so start the timer anyway
+      player.deathRestTimer = 0.8;
     }
     return;
   }
@@ -1277,26 +1482,34 @@ function updatePlayer() {
   // --- Power-up countdowns ---
   if (player.doubleJumpFlash  > 0) player.doubleJumpFlash  -= 1 / 60;
 
-  // --- Fell into a pit — lose a life and respawn ---
+  // --- Checkpoint tracking — remember the last solid ground stood on ---
+  // Sampled while grounded and not mid-charge, so respawns never drop the
+  // player back onto a spot they were already falling off.
+  if (player.isOnGround && Math.abs(player.vy) < 0.01 && !player.sliding) {
+    player.checkpointX = player.x;
+    player.checkpointY = player.y;
+  }
+
+  // --- Fell into a pit — lose a life and respawn at the last checkpoint ---
   if (player.y > canvas.height + 60) {
-    if (player.invincibleTimer <= 0) {
-      player.lives--;
-      SoundManager.playHit();
-      camera.shakeFrames = 20;
-      if (player.lives <= 0) {
-        SoundManager.stopMusic();
-        player.dying = true; player.vy = -8; player.vx = 0;
-        return;
-      }
-    }
-    player.x             = 80;
-    player.y             = GROUND_Y - player.height;
-    player.vx            = 0;
-    player.vy            = 0;
-    player.chargeFuel    = 0;
+    // A pit costs a life even with the Ring active — it stops damage, not gravity.
+    // Post-hit i-frames still grant a free fall, so a knockback into a pit is
+    // only charged once.
+    if (player.invincibleTimer <= 0) damagePlayer({ ignoreIFrames: true });
+    if (player.dying) return;
+
+    // Respawn on the last ground touched rather than at the level start.
+    // Level 2 is a 7000px pit gauntlet — restarting it from x=80 on every
+    // miss was the harshest thing in the game.
+    player.x  = player.checkpointX;
+    player.y  = player.checkpointY;
+    player.vx = 0;
+    player.vy = 0;
+    player.prevBottom      = player.y + player.height; // no phantom collision on the respawn frame
+    player.chargeFuel      = 0;
     player.invincibleTimer = 2.0;
-    camera.x             = 0;
-    collectibles.forEach(c => { c.collected = false; });
+    // NOTE: collectibles are deliberately NOT reset here. Doing so let the
+    // player re-collect burritos (+1 life each) by jumping into a pit on loop.
   }
 
   // --- Camera ---
@@ -1492,6 +1705,22 @@ function drawHogmanInGame(x, y, w, h) {
   ctx.fillRect(x, y, w, h);
 }
 
+// Per-sprite sink offsets for Gollum, measured from each PNG's alpha channel
+// (all are 687×1024). Value = VISUAL_H(92) × (1 − (contentBottom+1)/1024).
+//   gollum_crawling  content ends row 845 → 16
+//   gollum_idle      content ends row 843 → 16
+//   gollum_jump      content ends row 765 → 23
+//   gollum_crouching content ends row 759 → 24
+//   gollum_hurt      content ends row 745 → 25
+// Re-measure if any Gollum sprite is redrawn or re-cropped.
+const GOLLUM_SINK = {
+  gollum_run:       16,
+  gollum_idle:      16,
+  gollum_jump:      23,
+  gollum_crouching: 24,
+  gollum_hurt:      25,
+};
+
 // Gollum Man: hunched pale body + knuckle-walking arm + head + glasses
 function drawGollumInGame(x, y, w, h) {
   let sprKey;
@@ -1514,10 +1743,13 @@ function drawGollumInGame(x, y, w, h) {
     const drawH = VISUAL_H;
     const drawW = sz ? (sz.w / sz.h) * drawH : drawH;
     const drawX = x + (w - drawW) / 2; // horizontally centre on hitbox
-    // Each sprite has different transparent padding at the bottom of the 1024px source image.
-    // Idle/run: offset 26 keeps feet grounded.
-    // Crouching: needs offset 34 to stay grounded.
-    const sinkOffset = (sprKey === 'gollum_crouching') ? 34 : 26;
+    // Each Gollum sprite has a DIFFERENT amount of transparent padding below the
+    // figure in the 1024px-tall source, so one shared offset cannot ground them
+    // all. These are measured: sink = VISUAL_H * (1 - contentBottom/1024), which
+    // puts the painted feet exactly on the hitbox feet. PLANT sinks them a touch
+    // further so they read as standing on the surface rather than hovering.
+    const PLANT = 3;
+    const sinkOffset = (GOLLUM_SINK[sprKey] !== undefined ? GOLLUM_SINK[sprKey] : 16) + PLANT;
     const drawY = y + h - drawH + sinkOffset;
 
     SpriteLoader.blit(sprKey, drawX, drawY, drawW, drawH);
@@ -1563,42 +1795,6 @@ function getHillsSkyColor() {
 function drawSky() {
   ctx.fillStyle = getHillsSkyColor();
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-}
-
-// Drawn in parallax space with ctx already translated by -camera.x * 0.2
-function drawBgMountains() {
-  const BASE = GROUND_Y + 5;
-
-  // Back layer — dark purple silhouettes
-  const BACK = [
-    [-150,180,140],[80,130,110],[250,200,160],[460,150,125],[640,195,150],
-    [840,120,100],[970,235,175],[1190,155,130],[1360,100,85],
-    [1460,210,160],[1640,145,115],[1800,175,140],[1990,115,95],
-  ]; // [cx, h, halfWidth]
-  ctx.fillStyle = '#1a1428';
-  BACK.forEach(([x, h, hw]) => {
-    ctx.beginPath();
-    ctx.moveTo(x - hw, BASE);
-    ctx.lineTo(x, BASE - h);
-    ctx.lineTo(x + hw, BASE);
-    ctx.closePath();
-    ctx.fill();
-  });
-
-  // Front layer — slightly lighter, closer
-  const FRONT = [
-    [-60,90,80],[130,110,90],[320,75,65],[510,100,85],[700,85,75],
-    [880,115,95],[1060,80,70],[1240,105,88],[1420,70,62],[1580,95,82],[1730,85,74],
-  ];
-  ctx.fillStyle = '#22183a';
-  FRONT.forEach(([x, h, hw]) => {
-    ctx.beginPath();
-    ctx.moveTo(x - hw, BASE);
-    ctx.lineTo(x, BASE - h);
-    ctx.lineTo(x + hw, BASE);
-    ctx.closePath();
-    ctx.fill();
-  });
 }
 
 // Drawn in parallax space with ctx already translated by -camera.x * 0.5
@@ -1670,16 +1866,9 @@ function checkEnemyCollisions() {
       SoundManager.playDefeat();
     } else if (gameState.selectedCharacter === 'gollum' && (player.crouching || player.sliding)) {
       // Gollum sneak — crouching or sliding squeezes past, enemy unaware
-    } else if (player.invincibleTimer <= 0 && player.ringTimer <= 0) {
+    } else {
       // Side/head-on hit — lose a life
-      player.lives--;
-      player.invincibleTimer = 2.0;
-      SoundManager.playHit();
-      camera.shakeFrames = 20;
-      if (player.lives <= 0) {
-        SoundManager.stopMusic();
-        player.dying = true; player.vy = -8; player.vx = 0;
-      }
+      damagePlayer();
     }
   }
 }
@@ -1925,19 +2114,34 @@ function checkBossCollision() {
     player.sliding        = false;
     player.vx             = -player.facing * 5;
     player.invincibleTimer = 0.5;
-  } else if (player.invincibleTimer <= 0 && player.ringTimer <= 0) {
+  } else {
     // Side hit
-    player.lives--;
-    player.invincibleTimer = 2.0;
-    SoundManager.playHit();
-    camera.shakeFrames = 20;
-    if (player.lives <= 0) {
-      SoundManager.stopMusic();
-      player.dying = true; player.vy = -8; player.vx = 0;
-    }
+    damagePlayer();
   }
 }
 
+
+// Shared scratch canvas for shape-following sprite tints.
+// Uses a plain <canvas> rather than OffscreenCanvas, which isn't available on
+// older Safari — and a throw here would have taken the whole frame down.
+let _tintScratch = null;
+function getTintCanvas(w, h) {
+  const cw = Math.max(1, Math.ceil(w));
+  const ch = Math.max(1, Math.ceil(h));
+  try {
+    if (!_tintScratch) {
+      const c = document.createElement('canvas');
+      _tintScratch = { canvas: c, ctx: c.getContext('2d') };
+    }
+    if (_tintScratch.canvas.width !== cw || _tintScratch.canvas.height !== ch) {
+      _tintScratch.canvas.width  = cw;
+      _tintScratch.canvas.height = ch;
+    }
+    return _tintScratch.ctx ? _tintScratch : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 function drawTrollSign() {
   const SIGN_W = 80, SIGN_H = 120;
@@ -1996,14 +2200,18 @@ function drawBoss() {
   if (bs === 'waking' && boss.stateTimer < 1.0) {
     const flash = 0.25 + 0.25 * Math.sin(elapsed * 18);
     const img = SpriteLoader.getImg(sprKey);
-    if (img) {
-      const ofc = new OffscreenCanvas(w, h);
-      const ofCtx = ofc.getContext('2d');
-      ofCtx.drawImage(img, 0, 0, w, h);
-      ofCtx.globalCompositeOperation = 'source-atop';
-      ofCtx.fillStyle = `rgba(200,50,50,${flash})`;
-      ofCtx.fillRect(0, 0, w, h);
-      ctx.drawImage(ofc, x, y);
+    const tint = getTintCanvas(w, h);
+    if (img && tint) {
+      // Reuse one scratch canvas — this ran every frame for a full second and
+      // allocated a fresh OffscreenCanvas each time.
+      const tctx = tint.ctx;
+      tctx.clearRect(0, 0, w, h);
+      tctx.globalCompositeOperation = 'source-over';
+      tctx.drawImage(img, 0, 0, w, h);
+      tctx.globalCompositeOperation = 'source-atop';
+      tctx.fillStyle = `rgba(200,50,50,${flash})`;
+      tctx.fillRect(0, 0, w, h);
+      ctx.drawImage(tint.canvas, x, y, w, h);
     } else {
       ctx.fillStyle = `rgba(200,50,50,${flash})`;
       ctx.fillRect(x, y, w, h);
@@ -2015,7 +2223,7 @@ function drawBoss() {
 
 function drawBossHPBar() {
   if (!boss || !boss.alive || !player) return;
-  if (!boss.arenaLeft) return;
+  if (boss.arenaLeft === null) return; // 0 is a valid arena edge — don't test falsiness
   const W = canvas.width;
   const barW = 320, barH = 16;
   const barX = (W - barW) / 2;
@@ -2050,15 +2258,10 @@ function updateProjectiles() {
     p.y  += p.vy;
     if (p.x < -200 || p.x > LEVEL_WIDTH + 200 || p.y > 600) { p.alive = false; continue; }
     const chargingHogman = player.sliding && gameState.selectedCharacter === 'hogman';
-    if (player.invincibleTimer <= 0 && player.ringTimer <= 0 && !chargingHogman &&
+    if (!chargingHogman &&
         p.x + 4 > player.x && p.x - 4 < player.x + player.width &&
         p.y + 4 > player.y && p.y - 4 < player.y + player.height) {
-      p.alive = false;
-      player.lives--;
-      player.invincibleTimer = 2.0;
-      SoundManager.playHit();
-      camera.shakeFrames = 20;
-      if (player.lives <= 0) { SoundManager.stopMusic(); player.dying = true; player.vy = -8; player.vx = 0; }
+      if (damagePlayer()) p.alive = false;
     }
   }
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -2179,6 +2382,37 @@ const LEVEL2_COMPLETE_LINES = [
   'to continue your quest.',
 ];
 
+const LEVEL3_COMPLETE_LINES = [
+  'THE CITY IS BEHIND THEE',
+  '',
+  'Thou hast crossed the crooked city,',
+  'vaulted its awnings, and offended',
+  'roughly four hundred merchants.',
+  '',
+  'The wizard was not home.',
+  'There was a note. It said',
+  '"BACK IN FIVE MINUTES".',
+  'It was written in gravy.',
+  'It is not clear when.',
+  '',
+  'The hog is tired.',
+  'The Gollum Man has eaten',
+  'something he should not have.',
+  '',
+  'The lamp remains unfound.',
+  'The saga remains unfinished.',
+  '',
+  'Press ENTER',
+  'to begin again, wiser.',
+];
+
+// Per-level ending copy: [lines, headingPrefix, headingHighlight]
+const COMPLETE_SCREENS = {
+  1: { lines: LEVEL_COMPLETE_LINES,  prefix: 'THE TILE TROLL IS ', highlight: 'SLAIN' },
+  2: { lines: LEVEL2_COMPLETE_LINES, prefix: '',                   highlight: 'ONWARD' },
+  3: { lines: LEVEL3_COMPLETE_LINES, prefix: 'THE CITY IS ',       highlight: 'BEHIND THEE' },
+};
+
 function drawInterstitialPanel(heading1, heading2) {
   const W = canvas.width, H = canvas.height;
   const MID = 520;
@@ -2269,13 +2503,15 @@ function drawLevelComplete() {
   const PANEL_B    = H - 60;
   const PANEL_H    = PANEL_B - PANEL_T;
   const LINE_H     = 28;
-  const lines      = currentLevel === 2 ? LEVEL2_COMPLETE_LINES : LEVEL_COMPLETE_LINES;
+  const screen     = COMPLETE_SCREENS[currentLevel] || COMPLETE_SCREENS[1];
+  const lines      = screen.lines;
   // Ensure scroll goes far enough that the last line is fully visible
   const baseScroll = PANEL_T + PANEL_H - (H * 0.20 + 32);
   const MAX_SCROLL = Math.max(baseScroll, (lines.length - 1) * LINE_H + PANEL_T + LINE_H);
 
-  // Advance scroll only until the text has reached the top
-  if (levelCompleteScroll < MAX_SCROLL) levelCompleteScroll += 0.6;
+  // Advance scroll only until the text has reached the top.
+  // Time-based (36px/s) so the crawl reads at the same pace on a 144Hz display.
+  if (levelCompleteScroll < MAX_SCROLL) levelCompleteScroll += 36 * frameDt;
 
   ctx.save();
 
@@ -2296,8 +2532,8 @@ function drawLevelComplete() {
 
     if (i === 0) {
       ctx.font = '11px "Press Start 2P", monospace';
-      const prefix    = currentLevel === 2 ? '' : 'THE TILE TROLL IS ';
-      const highlight = currentLevel === 2 ? 'ONWARD' : 'SLAIN';
+      const prefix    = screen.prefix;
+      const highlight = screen.highlight;
       const fullW     = ctx.measureText(prefix + highlight).width;
       const prefixW   = ctx.measureText(prefix).width;
       const highlightW = ctx.measureText(highlight).width;
@@ -2430,13 +2666,14 @@ function updateCollectibles() {
   const pcy = player.y + player.height / 2;
   const rw  = player.width  / 2 + COLL_HALF;
   const rh  = player.height / 2 + COLL_HALF;
+  const restY = groundSurfaceY() - COLL_HALF;
   for (const c of collectibles) {
     if (c.collected) continue;
     if (c.falling) {
       c.vy = Math.min(c.vy + 0.5, 15);
       c.y += c.vy;
-      if (c.y >= GROUND_Y - COLL_HALF) {
-        c.y       = GROUND_Y - COLL_HALF;
+      if (c.y >= restY) {
+        c.y       = restY;
         c.vy      = 0;
         c.falling = false;
         c.bobOffset = Math.random() * Math.PI * 2;
@@ -2478,6 +2715,12 @@ function updateCollectibles() {
         }
       }
     }
+  }
+
+  // Rained tacos are spawned indefinitely during the boss fight — drop the
+  // eaten ones so a long fight can't grow the array without bound.
+  for (let i = collectibles.length - 1; i >= 0; i--) {
+    if (collectibles[i].rained && collectibles[i].collected) collectibles.splice(i, 1);
   }
 }
 
@@ -2577,17 +2820,25 @@ function drawPlatform(plat) {
     }
 
   } else if (type === 'tower_wall') {
-    // Solid tower obstacle — maintain sprite aspect ratio, centered on collision box.
-    // The sprite has ~18% transparent padding on left/right and ~5% at the bottom.
-    // SINK extends the draw height so the building base visually sits on the ground
-    // (the extra pixels draw under the ground tile and are hidden).
+    // Solid tower obstacle.
+    //
+    // The sprite must be anchored by its PAINTED FEATURES, not its bounding box.
+    // Anchoring the sprite's top edge to the collision top put the collision
+    // surface ~70px above the painted roof, so the player stood on thin air.
+    // The bounding box top is the chimney tip, which is not a standing surface.
     if (SpriteLoader.ready('l3_tower')) {
-      const sz = SpriteLoader.size('l3_tower');
-      const SINK = 30; // extra px to bury the bottom transparent padding in the ground
-      const drawH = h + SINK;
-      const drawW = sz ? (sz.w / sz.h) * drawH : w;
-      const drawX = x + (w - drawW) / 2;
-      SpriteLoader.blit('l3_tower', drawX, y, drawW, drawH);
+      const sz     = SpriteLoader.size('l3_tower');
+      const aspect = sz ? (sz.w / sz.h) : TOWER_ASPECT;
+      // Solve for the draw height that puts the parapet on the collision top
+      // AND the base TOWER_BURY px below the street.
+      const drawH = (h + TOWER_BURY) / (TOWER_BASE_FRAC - TOWER_PARAPET_FRAC);
+      const drawW = aspect * drawH;
+      // Anchor both axes on painted features. The body is NOT centred within the
+      // PNG (it sits ~0.8% right of centre), so centring the sprite on the box
+      // would leave the collision edge ~5px off the wall.
+      const drawY = y - TOWER_PARAPET_FRAC * drawH;   // parapet → collision top
+      const drawX = x - TOWER_BODY_LEFT_FRAC * drawW; // body left → collision left
+      SpriteLoader.blit('l3_tower', drawX, drawY, drawW, drawH);
     } else {
       ctx.fillStyle = '#1e1828';
       ctx.fillRect(x, y, w, h);
@@ -2603,10 +2854,12 @@ function drawPlatform(plat) {
     // side:'left'  → bracket on right, fabric extends left  (default / original)
     // side:'right' → bracket on left, fabric extends right (sprite flipped)
     const sprScale = plat.sprScale || 1; // optional per-awning size multiplier
-    const SPR_W = Math.round(120 * sprScale);
-    const SPR_H = Math.round(75  * sprScale);
+    const SPR_W = Math.round(128 * sprScale);
+    const SPR_H = Math.round(80  * sprScale);
     const isRight = plat.side === 'right';
-    // drawOffsetY: push sprite higher on the tower face than the collision box
+    // drawOffsetY: raises (+) or lowers (−) the sprite relative to the collision box.
+    // Level-3 awnings use NEGATIVE values so the canopy's top surface drops to the
+    // hitbox y, letting the player stand on the canopy rather than its lower lip.
     const extraUp = plat.drawOffsetY || 0;
     const drawY = y - (SPR_H - Math.round(20 * sprScale)) - extraUp;
     // wallOffset: extend sprite RIGHT edge toward the tower wall so it looks attached.
@@ -2635,12 +2888,10 @@ function drawPlatform(plat) {
     }
 
   } else if (type === 'cart') {
-    // Cart — sprite fills from collision top (y) down to ground (y+h), aspect-correct width.
+    // Cart — the painted cart fills the collision box, so the player stands on
+    // the cart bed rather than 12px above it on invisible air.
     if (SpriteLoader.ready('l3_cart')) {
-      const sz = SpriteLoader.size('l3_cart');
-      const drawW = sz ? (sz.w / sz.h) * h : w;
-      const drawX = x + (w - drawW) / 2;
-      SpriteLoader.blit('l3_cart', drawX, y, drawW, h);
+      blitContentFit('l3_cart', x, y, w, h, SPRITE_METRICS.l3_cart);
     } else {
       ctx.fillStyle = '#8B5E3C';
       ctx.fillRect(x, y, w, h);
@@ -2649,16 +2900,25 @@ function drawPlatform(plat) {
     }
 
   } else if (type === 'low_building') {
-    // Wide low building — tiled horizontally, parapet at top = landing surface.
+    // Wide low building — tiled horizontally, roof at top = landing surface.
+    // Scaled so the painted roof meets the collision top (the PNG has ~4% top
+    // padding) while the base still reaches the street.
     if (SpriteLoader.ready('l3_low_building')) {
       const sz = SpriteLoader.size('l3_low_building');
-      const tileW = sz ? (sz.w / sz.h) * h : 420;
+      // SURFACE is the top of the SOLID wall (row 21), not the merlon tips
+      // (rows 5–18 are crenellations, only ~50-68% opaque). Anchoring on the
+      // merlons made the player stand on the battlement tips, visibly floating
+      // above the wall-walk. Now the merlons rise ~8px around their feet.
+      const SURFACE = 21 / 248, BASE = 246 / 248;
+      const drawH = h / (BASE - SURFACE);
+      const drawY = y - SURFACE * drawH;
+      const tileW = sz ? (sz.w / sz.h) * drawH : 420;
       ctx.save();
       ctx.beginPath();
       ctx.rect(x, y, w, h);
       ctx.clip();
       for (let tx = x; tx < x + w; tx += tileW) {
-        SpriteLoader.blit('l3_low_building', tx, y, tileW, h);
+        SpriteLoader.blit('l3_low_building', tx, drawY, tileW, drawH);
       }
       ctx.restore();
     } else {
@@ -2669,9 +2929,11 @@ function drawPlatform(plat) {
     }
 
   } else if (type === 'two_storey') {
-    // Two-storey building — sprite fills collision box, roof at top = landing surface.
+    // Two-storey building — the painted house fills the collision box, so the
+    // roof ridge IS the landing surface. Blitting the raw PNG into the box left
+    // the painted house only ~55% of the box width and 38px below its top.
     if (SpriteLoader.ready('l3_two_storey')) {
-      SpriteLoader.blit('l3_two_storey', x, y, w, h);
+      blitContentFit('l3_two_storey', x, y, w, h, SPRITE_METRICS.l3_two_storey);
     } else {
       ctx.fillStyle = '#c8b88a';
       ctx.fillRect(x, y, w, h);
@@ -2756,25 +3018,6 @@ function drawTiledLayer(key, parallaxScrollX, anchorY = canvas.height, targetH =
 }
 
 // ---------------------------------------------------------------------------
-// Zone detection (used by drawPlayingScene for background layer switching)
-// ---------------------------------------------------------------------------
-function getZone(cx) {
-  if (cx < 2000)  return 'green';
-  if (cx < 4200)  return 'forest';
-  if (cx < 6500)  return 'ruins';
-  return 'castle';
-}
-
-// Returns 0–1 blend from zoneA toward zoneB over a 400px window at boundary
-function getZoneBlend(cx, boundary) {
-  const BLEND_HALF = 200;
-  const d = cx - boundary;
-  if (d < -BLEND_HALF) return 0;
-  if (d >  BLEND_HALF) return 1;
-  return (d + BLEND_HALF) / (BLEND_HALF * 2);
-}
-
-// ---------------------------------------------------------------------------
 // Playing scene & HUD
 // ---------------------------------------------------------------------------
 
@@ -2796,6 +3039,17 @@ function drawPlayingScene() {
     drawBgTrees();
   }
   ctx.restore();
+
+  // Level 3: atmospheric haze pushes the detailed city backdrop into the distance
+  // so the foreground gameplay sprites (towers, awnings, carts) read as the near layer.
+  if (currentLevel === 3) {
+    const haze = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    haze.addColorStop(0,    'rgba(38, 48, 78, 0.55)');
+    haze.addColorStop(0.65, 'rgba(38, 48, 78, 0.42)');
+    haze.addColorStop(1,    'rgba(38, 48, 78, 0.30)');
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   // Layer 3: World space — platforms, enemies, player
   ctx.save();
@@ -2987,6 +3241,19 @@ function drawHUD() {
     ctx.fillText('F', KEY_X + KEY_W / 2, KEY_Y + KEY_H / 2 + 1);
   }
 
+  // Muted indicator — top right, only while muted
+  if (SoundManager.isMuted()) {
+    ctx.save();
+    ctx.font         = '8px "Press Start 2P", monospace';
+    ctx.textAlign    = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle    = 'rgba(255,255,255,0.45)';
+    ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur   = 3;
+    ctx.fillText('MUTED  [M]', canvas.width - 14, 14);
+    ctx.restore();
+  }
+
   // "+1 UP!" flash — centred on screen, fades out over last 0.8s
   if (player.extraLifeTimer > 0) {
     const alpha = player.extraLifeTimer < 0.8 ? player.extraLifeTimer / 0.8 : 1;
@@ -3016,11 +3283,31 @@ function drawPauseMenu() {
 
   ctx.save();
 
-  // Black panel
-  const pw = 260, ph = 130;
+  // Dim the frozen world behind the panel so the menu reads clearly
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Character-specific move list — nothing else in the game explains these
+  const isHogman = gameState.selectedCharacter === 'hogman';
+  const controls = isHogman
+    ? [['MOVE', 'LEFT / RIGHT'],
+       ['JUMP', 'SPACE  (hold = higher)'],
+       ['HOG CHARGE', 'HOLD F  (+UP = launch)'],
+       ['MUTE', 'M']]
+    : [['MOVE', 'LEFT / RIGHT'],
+       ['JUMP', 'SPACE  (x2 in air)'],
+       ['CROUCH / SNEAK', 'DOWN'],
+       ['SLIDE', 'DOWN while running'],
+       ['MUTE', 'M']];
+
+  const pw = 380;
+  const ph = 150 + controls.length * 16;
   const px = (W - pw) / 2, py = (H - ph) / 2;
   ctx.fillStyle = '#000000';
   ctx.fillRect(px, py, pw, ph);
+  ctx.strokeStyle = 'rgba(201,168,76,0.7)';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(px, py, pw, ph);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -3032,46 +3319,50 @@ function drawPauseMenu() {
   // Title
   ctx.font = '11px "Press Start 2P", monospace';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('PAUSED', W / 2, py + 24);
+  ctx.fillText('PAUSED', W / 2, py + 26);
 
   // Menu options
   const options = ['RESUME', 'QUIT TO MENU'];
   options.forEach((label, i) => {
-    const oy = py + 56 + i * 30;
+    const oy = py + 58 + i * 28;
     const selected = (i === pauseMenuIndex);
     ctx.font = '9px "Press Start 2P", monospace';
-    ctx.fillStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.4)';
+    ctx.fillStyle = selected ? '#ffd84a' : 'rgba(255,255,255,0.4)';
     ctx.fillText(label, W / 2, oy);
     // Arrow drawn separately at the panel's left edge so it doesn't offset the centred label
     if (selected) {
       ctx.textAlign = 'left';
-      ctx.fillText('>', px + 14, oy);
+      ctx.fillText('>', px + 20, oy);
       ctx.textAlign = 'center';
     }
   });
 
-  // Controls hint
+  // Divider
+  const listTop = py + 118;
+  ctx.strokeStyle = 'rgba(201,168,76,0.35)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(px + 20, listTop - 16);
+  ctx.lineTo(px + pw - 20, listTop - 16);
+  ctx.stroke();
+
+  // Controls list — label left, binding right
   ctx.font = '6px "Press Start 2P", monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillText('UP/DOWN  ENTER  ESC', W / 2, py + ph - 14);
+  controls.forEach(([label, binding], i) => {
+    const ly = listTop + i * 16;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText(label, px + 20, ly);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,216,74,0.65)';
+    ctx.fillText(binding, px + pw - 20, ly);
+  });
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillText('UP/DOWN   ENTER   ESC', W / 2, py + ph - 16);
 
   ctx.restore();
-}
-
-// ---------------------------------------------------------------------------
-// Utility: rounded rectangle path
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
 }
 
 // ---------------------------------------------------------------------------
@@ -3131,11 +3422,85 @@ function drawCRTEffect() {
   ctx.restore();
 }
 
+// One fixed-timestep simulation tick of the PLAYING state.
+// Everything in here advances by exactly FIXED_DT seconds.
+function stepPlaying() {
+  if (ringRevealTimer > 0) ringRevealTimer -= FIXED_DT;
+  if (player && player.extraLifeTimer > 0) player.extraLifeTimer -= FIXED_DT;
+
+  updatePlayer();
+  updateEnemies();
+  checkEnemyCollisions();
+  updateCollectibles();
+  if (boss && boss.alive) updateBoss();
+  updateTacoRain();
+  updateProjectiles();
+  if (boss && boss.alive) checkBossCollision();
+
+  // Level complete — boss dead (or no boss), player runs off the right edge
+  if ((!boss || !boss.alive) && player && !player.dying && player.x > LEVEL_WIDTH + 50) {
+    SoundManager.stopMusic();
+    SoundManager.playLevelWin();
+    levelCompleteScroll = 0;
+    state = 'LEVEL_COMPLETE';
+  }
+}
+
+// Taco rain — Hogman only, active while the level 1 boss is alive
+function updateTacoRain() {
+  if (!boss || !boss.alive || gameState.selectedCharacter !== 'hogman') return;
+  tacoRainTimer -= FIXED_DT;
+  if (tacoRainTimer > 0) return;
+
+  const arenaL = boss.arenaLeft !== null ? boss.arenaLeft : BOSS_ARENA_LEFT;
+  const arenaR = LEVEL_WIDTH - 20;
+  const visL   = Math.max(arenaL, camera.x + 50);
+  const visR   = Math.min(arenaR, camera.x + canvas.width - 50);
+  if (visR > visL) {
+    const spawnX = visL + Math.random() * (visR - visL);
+    collectibles.push({ x: spawnX, y: -COLL_HALF, type: 'taco', collected: false,
+                        vy: 0, falling: true, rained: true, bobOffset: 0 });
+  }
+  tacoRainTimer = 5 + Math.random() * 4; // next drop in 5–9 s
+}
+
+// One-shot inputs handled once per frame in PLAYING (menu/dev keys)
+function handlePlayingInput() {
+  if (justPressed['Escape']) {
+    pauseMenuIndex = 0;
+    SoundManager.setMusicDucked(true);
+    state = 'PAUSED';
+    return;
+  }
+  // DEV: jump to level with number keys
+  if (justPressed['Digit1']) { initLevel(1); SoundManager.startMusic(); }
+  if (justPressed['Digit2']) { initLevel(2); SoundManager.startMusic(); }
+  if (justPressed['Digit3']) { initLevel(3); SoundManager.startMusic(); }
+}
+
 function gameLoop(timestamp) {
   // Clamp dt to 100ms max — prevents huge jump on first frame or after tab switch
   const dt = lastTime === 0 ? 0 : Math.min((timestamp - lastTime) / 1000, 0.1);
   lastTime = timestamp;
   elapsed += dt;
+  frameDt  = dt;
+
+  // Accumulate real time into whole 1/60s simulation steps
+  accumulator = Math.min(accumulator + dt, FIXED_DT * MAX_CATCHUP_STEPS);
+  let steps = 0;
+  while (accumulator >= FIXED_DT) {
+    accumulator -= FIXED_DT;
+    steps++;
+  }
+
+  // Menus process input once per frame; PLAYING only when it actually ticks,
+  // so a keypress arriving on a sub-step frame is carried over rather than
+  // dropped. This has to be decided BEFORE any input is read — otherwise a
+  // held-over press gets acted on again on the following frame.
+  const inputConsumed = (state !== 'PLAYING') || steps > 0;
+
+  // Global mute toggle
+  if (inputConsumed && justPressed['KeyM']) SoundManager.toggleMute();
 
   syncCanvasSize();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -3169,51 +3534,16 @@ function gameLoop(timestamp) {
     }
 
   } else if (state === 'PLAYING') {
-    if (justPressed['Escape']) {
-      pauseMenuIndex = 0;
-      state = 'PAUSED';
-    }
-    // DEV: jump to level with number keys
-    if (justPressed['Digit1']) { initLevel(1); SoundManager.startMusic(); }
-    if (justPressed['Digit2']) { initLevel(2); SoundManager.startMusic(); }
-    if (justPressed['Digit3']) { initLevel(3); SoundManager.startMusic(); }
-    if (ringRevealTimer > 0) ringRevealTimer -= dt;
-    if (player && player.extraLifeTimer > 0) player.extraLifeTimer -= dt;
-    updatePlayer();
-    updateEnemies();
-    checkEnemyCollisions();
-    updateCollectibles();
-    if (boss && boss.alive) updateBoss();
-
-    // Taco rain — Hogman only, active while boss is alive
-    if (boss && boss.alive && gameState.selectedCharacter === 'hogman') {
-      tacoRainTimer -= dt;
-      if (tacoRainTimer <= 0) {
-        const arenaL = boss.arenaLeft !== null ? boss.arenaLeft : BOSS_ARENA_LEFT;
-        const arenaR = LEVEL_WIDTH - 20;
-        const visL   = Math.max(arenaL, camera.x + 50);
-        const visR   = Math.min(arenaR, camera.x + canvas.width - 50);
-        if (visR > visL) {
-          const spawnX = visL + Math.random() * (visR - visL);
-          collectibles.push({ x: spawnX, y: -COLL_HALF, type: 'taco', collected: false, vy: 0, falling: true, bobOffset: 0 });
-        }
-        tacoRainTimer = 5 + Math.random() * 4; // next drop in 5–9 s
+    if (steps > 0) {
+      handlePlayingInput();
+      for (let i = 0; i < steps && state === 'PLAYING'; i++) {
+        stepPlaying();
+        // One-shot inputs belong to a single tick — otherwise a catch-up frame
+        // would fire the same jump two or three times.
+        if (i === 0) clearJustPressed();
       }
     }
-
-    updateProjectiles();
-    if (boss && boss.alive) checkBossCollision();
     drawPlayingScene();
-
-    // Level complete — boss dead (or no boss), player runs off the right edge
-    if ((!boss || !boss.alive) && !player.dying) {
-      if (player.x > LEVEL_WIDTH + 50) {
-        SoundManager.stopMusic();
-        SoundManager.playLevelWin();
-        levelCompleteScroll = 0;
-        state = 'LEVEL_COMPLETE';
-      }
-    }
 
   } else if (state === 'PAUSED') {
     // Draw frozen game world underneath
@@ -3222,6 +3552,7 @@ function gameLoop(timestamp) {
     drawPauseMenu();
 
     if (justPressed['Escape']) {
+      SoundManager.setMusicDucked(false);
       state = 'PLAYING';
     }
     if (justPressed['ArrowUp'])   pauseMenuIndex = 0;
@@ -3229,6 +3560,7 @@ function gameLoop(timestamp) {
     if (justPressed['Enter']) {
       if (pauseMenuIndex === 0) {
         // Resume
+        SoundManager.setMusicDucked(false);
         state = 'PLAYING';
       } else {
         // Quit to character select
@@ -3245,8 +3577,9 @@ function gameLoop(timestamp) {
     }
     if (justPressed['Enter']) {
       if (gameOverMenuIndex === 0) {
-        // TRY HARDER — restart the level
-        initLevel();
+        // TRY HARDER — restart the level the player actually died on,
+        // not level 1 (initLevel() defaults to 1).
+        initLevel(currentLevel);
         SoundManager.startMusic();
         state = 'PLAYING';
       } else {
@@ -3259,12 +3592,8 @@ function gameLoop(timestamp) {
   } else if (state === 'LEVEL_COMPLETE') {
     drawLevelComplete();
     if (justPressed['Enter']) {
-      if (currentLevel === 1) {
-        initLevel(2);
-        SoundManager.startMusic();
-        state = 'PLAYING';
-      } else if (currentLevel === 2) {
-        initLevel(3);
+      if (currentLevel < 3) {
+        initLevel(currentLevel + 1);
         SoundManager.startMusic();
         state = 'PLAYING';
       } else {
@@ -3275,9 +3604,23 @@ function gameLoop(timestamp) {
 
   drawCRTEffect();
 
-  clearJustPressed();
-  requestAnimationFrame(gameLoop);
+  if (inputConsumed) clearJustPressed();
+}
+
+function frame(timestamp) {
+  // A thrown exception used to kill the game permanently, because the next
+  // requestAnimationFrame was only scheduled at the very end of gameLoop.
+  // Scheduling first keeps a bad frame from becoming a frozen screen.
+  requestAnimationFrame(frame);
+  try {
+    gameLoop(timestamp);
+  } catch (err) {
+    if (!frame._reported) {
+      frame._reported = true;
+      console.error('Noble Hog Saga — frame error:', err);
+    }
+  }
 }
 
 SpriteLoader.load();
-requestAnimationFrame(gameLoop);
+requestAnimationFrame(frame);

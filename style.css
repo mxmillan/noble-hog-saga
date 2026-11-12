@@ -34,4 +34,14 @@ html, body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   overflow: hidden;
+
+  /* The canvas backing store switches between 520x780, 1024x576 and 1040x780
+     depending on state. Without these caps the taller screens overflowed the
+     viewport on a laptop and got clipped by body{overflow:hidden}. Scaling the
+     displayed size leaves the internal resolution untouched. */
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+
+  /* Stops the browser hijacking arrow keys / pinch gestures over the canvas */
+  touch-action: none;
 }

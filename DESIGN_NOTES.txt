@@ -1,27 +1,42 @@
 NOBLE HOG SAGA — DESIGN NOTES
 ==============================
 Generated: 2026-02-28
+Partially superseded: 2026-07-27 — see CLAUDE.md for current state.
+
+!! STALE FILE WARNING !!
+  This document predates the level 2 and level 3 art and most of the asset
+  work. The asset inventory below is no longer accurate — several files it
+  lists as missing now exist. CLAUDE.md is the authoritative reference.
+  Kept for the tile specs (sizes / tiling rules), which are still correct.
 
 
 LEVEL DESIGN ISSUES
 -------------------
 
-Zone 1 is effectively flat.
+Zone 1 is effectively flat.  [STILL OPEN]
   The elevated wood plank platforms are optional — a player who just runs
   left-to-right on the ground loses almost nothing. There's no incentive
   to go up and no punishment for ignoring them. The first 2000px should
   force some vertical engagement.
 
 
-Zone boundary mismatch.
-  The visual zone transitions (getZone()) trigger at x=1800, 4000, 6300
-  but the platform layout is commented as 2000, 4200, 6500. The sky and
-  background shift 200px before the platform type changes.
+Zone boundary mismatch.  [MOOT — 2026-07-27]
+  getZone() and getZoneBlend() were never called by anything; the sky and
+  background never actually switched on them. Both functions have been
+  removed, so there is no mismatch to fix.
 
 
 
-ASSET INVENTORY
+ASSET INVENTORY  [OUT OF DATE — see CLAUDE.md]
 ---------------
+
+As of 2026-07-27 level1_tiles/ contains bg_green_hills.png,
+bg_mountains_sky.png, ground_grass_standard.png and
+platform_wood_plank.png. Still absent and falling back to procedural
+drawing: ground_grass_alt.png, ground_edge_left.png,
+ground_edge_right.png. Levels 2 and 3 are fully arted.
+
+The original text of this section follows for reference only.
 
 The level1_tiles/ folder is completely empty. Every platform and
 background layer is currently procedural fallback (solid colours).
@@ -99,9 +114,11 @@ TIER 3 — Missing characters / enemies / collectibles
 ------------------------------------------------------
 
 
-lamp.png
-  The Magic Lamp powerup — key endgame item, no sprite at all.
-  Draw dimensions in game: approximately 32x32px.
+lamp.png  [MOOT — 2026-07-27]
+  There is no Magic Lamp anywhere in game.js — no SpriteLoader.PATHS entry,
+  no powerup, no collectible type. The `powerups` array is initialised empty
+  and never read. Adding the sprite alone would do nothing; the item would
+  have to be built first. (The path below was also a typo: .pn, not .png.)
   Path: assets/sprites/collectibles/lamp.pn
 
 ASSET FORMAT RULES
