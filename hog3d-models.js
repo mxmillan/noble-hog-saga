@@ -366,6 +366,66 @@ export function buildFood(type) {
   }
   return g;
 }
+// The golden foods the chapters' keepers give up (see hog-progress.js). Each glows, and wears a halo.
+export function buildRelic(id) {
+  const g = new THREE.Group(), f = pivot(g);
+  const gold = (map, color = 0xffffff, glow = 0x5a3600) => new THREE.MeshLambertMaterial({ color, emissive: glow, map: map || null, flatShading: true });
+  if (id === 'churro') {                                   // two ridged sticks, crossed, rolled in sugar
+    const m = gold(speckle(16, '#e9a93a', ['#fff6d8', '#c9861c', '#ffe9a8', '#fff6d8'], 70));
+    for (const k of [1, -1]) {
+      const st = pivot(f, 0, 0, k * 0.12); st.rotation.z = k * 0.62;
+      add(st, new THREE.CylinderGeometry(0.19, 0.19, 1.7, 6), m);
+      for (const y of [-0.6, -0.2, 0.2, 0.6]) add(st, new THREE.CylinderGeometry(0.215, 0.215, 0.09, 6), gold(null, 0xc9861c, 0x3a2200), 0, y, 0);
+    }
+  } else if (id === 'popper') {                            // a jalapeño with a belt of golden crumb, cheese showing at the top
+    const crumb = gold(speckle(16, '#e6b545', ['#fff0b8', '#b98a1e', '#f6d878'], 60)), green = gold(null, 0x3f9a2c, 0x0c2a06);
+    add(f, new THREE.CylinderGeometry(0.36, 0.4, 0.3, 7), green, 0, 0.55, 0); add(f, new THREE.CylinderGeometry(0.3, 0.3, 0.08, 7), gold(null, 0xfff2c8, 0x4a4020), 0, 0.72, 0);
+    add(f, new THREE.CylinderGeometry(0.45, 0.4, 0.62, 7), crumb, 0, 0.1, 0);
+    add(f, new THREE.CylinderGeometry(0.36, 0.2, 0.4, 7), green, 0, -0.4, 0); add(f, new THREE.ConeGeometry(0.2, 0.45, 7).rotateX(Math.PI), green, 0.06, -0.8, 0).rotation.z = 0.3;
+    add(f, new THREE.CylinderGeometry(0.06, 0.09, 0.34, 5), gold(null, 0x2c6a1c, 0x081c04), 0.06, 0.92, 0).rotation.z = -0.4;
+    f.rotation.z = 0.5;
+  } else if (id === 'chimichanga') {                       // a fried parcel, folded at the ends, sauce across the top
+    const fried = gold(speckle(16, '#d99a34', ['#b97414', '#f2c868', '#a8620e', '#e8b450'], 60));
+    add(f, B(1.25, 0.5, 0.74), fried); for (const sx of [1, -1]) add(f, B(0.2, 0.4, 0.62), fried, sx * 0.7, -0.03, 0);
+    add(f, B(0.2, 0.07, 0.8), gold(null, 0xd8382c, 0x4a0c08), -0.26, 0.28, 0).rotation.y = 0.3;
+    add(f, B(0.17, 0.07, 0.8), gold(null, 0xf6f0e0, 0x4a4638), 0.2, 0.28, 0).rotation.y = 0.3;
+    f.rotation.z = 0.2;
+  } else {                                                 // the Food of the Lamp: the burger the whole book is after
+    const b = buildFood('burger'); b.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.emissive = new THREE.Color(0x4a3000); } }); b.scale.setScalar(1.15); f.add(b);
+  }
+  const halo = add(g, new THREE.TorusGeometry(1.08, 0.045, 4, 16), new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.75 })); halo.rotation.x = 1.2;
+  g.userData.halo = halo; g.scale.setScalar(1.45);
+  return g;
+}
+// A bottle of hot sauce: five are hidden on each side road.
+export function buildSauce() {
+  const g = new THREE.Group(), red = new THREE.MeshLambertMaterial({ color: 0xd8281c, emissive: 0x4a0a06, flatShading: true });
+  add(g, new THREE.CylinderGeometry(0.34, 0.34, 0.8, 7), red, 0, 0, 0); add(g, new THREE.CylinderGeometry(0.15, 0.34, 0.3, 7), red, 0, 0.55, 0);
+  add(g, new THREE.CylinderGeometry(0.13, 0.13, 0.3, 7), red, 0, 0.83, 0); add(g, new THREE.CylinderGeometry(0.17, 0.17, 0.16, 7), lam(0x2f8a2a), 0, 1.04, 0);
+  add(g, new THREE.CylinderGeometry(0.35, 0.35, 0.42, 7), new THREE.MeshLambertMaterial({ color: 0xfff2c8, emissive: 0x3a3420, flatShading: true }), 0, -0.02, 0);
+  add(g, B(0.2, 0.2, 0.06), lam(0xd8281c), 0, -0.02, 0.33);
+  g.scale.setScalar(1.35);
+  return g;
+}
+// A door to a chapter: a stone arch (or, flat, a rim on the floor) round a film of light. The film's map scrolls.
+export function buildPortal(o = {}) {
+  const w = o.w || 4.2, h = o.h || 5.4, g = new THREE.Group(), stone = (x, y) => lam(0xffffff, rep(shared.wall, x, y));
+  const swirl = tex(32, 64, (c, tw, th) => { c.fillStyle = '#fff'; c.fillRect(0, 0, tw, th); for (let i = 0; i < 110; i++) { c.fillStyle = ['#ffffff', '#cfcfcf', '#a8a8a8', '#e6e6e6'][(rand() * 4) | 0]; c.fillRect((rand() * tw) | 0, (rand() * th) | 0, 2 + ((rand() * 6) | 0), 1); } }, true);
+  const mat = new THREE.MeshBasicMaterial({ map: swirl, color: o.colour || 0xffd27a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+  let film;
+  if (o.flat) {
+    film = add(g, new THREE.CircleGeometry(1.75, 14).rotateX(-Math.PI / 2), mat, 0, 0.07, 0);
+    add(g, new THREE.TorusGeometry(1.85, 0.16, 4, 14).rotateX(Math.PI / 2), lam(0x4a3220), 0, 0.08, 0);
+  } else {
+    film = add(g, new THREE.PlaneGeometry(w, h), mat, 0, h / 2, 0);
+    if (o.arch !== false) {
+      for (const sx of [1, -1]) { add(g, B(1.1, h + 0.4, 1.3), stone(0.3, 1.6), sx * (w / 2 + 0.55), h / 2 - 0.2, 0); add(g, B(1.4, 0.5, 1.6), stone(0.4, 0.15), sx * (w / 2 + 0.55), 0.05, 0); }
+      add(g, B(w + 2.8, 1.2, 1.5), stone(1.8, 0.3), 0, h + 0.6, 0);
+      add(g, B(1.1, 1.5, 1.6), lam(o.colour || 0xffd27a), 0, h + 0.6, 0);
+    }
+  }
+  return { g, film };
+}
 export function buildRing() {
   const g = new THREE.Group();
   const gold = new THREE.MeshLambertMaterial({ color: 0xf4bd2c, emissive: 0x6a4500, flatShading: true });

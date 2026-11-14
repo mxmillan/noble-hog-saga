@@ -4,8 +4,10 @@
 // are data-and-build functions in saga-levels.js; the cast and props are in hog3d-models.js.
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
-import * as Models from './hog3d-models.js?v=4';
-import { LEVELS } from './saga-levels.js?v=1';
+import * as Models from './hog3d-models.js?v=6';
+import { LEVELS } from './saga-levels.js?v=3';
+import * as Progress from './hog-progress.js?v=2';
+const MAIN = LEVELS.filter(l => !l.side).length;       // the book's chapters come first in LEVELS; the side roads follow
 
 // ───────────────────────────── utils ─────────────────────────────
 const $ = id => document.getElementById(id);
@@ -277,7 +279,7 @@ const P = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, dirX: 0, dirZ: -1, grounded: 
             charge: 0, boostT: 0, fuel: 0.4, hp: 4, maxHp: 4, gy: 0, inv: 0, stun: 0, dead: 0, anim: 0, squash: 0, sliding: false, frozen: false, wantCharge: false, safeT: 0, hoof: 0 };
 const cam = { yaw: 0, pitch: 0.34, dist: 15, cur: 15, manualT: 0, tgt: new THREE.Vector3(), shake: 0 };
 let state = 'loading', time = 0, playTime = 0, deaths = 0, foodAll = 0;
-let checkpoint = { x: 0, y: 0, z: 0 }, lastSafe = { x: 0, y: 0, z: 0 };
+let checkpoint = { x: 0, y: 0, z: 0 }, lastSafe = { x: 0, y: 0, z: 0 }, liveSafe = false;      // liveSafe: a chapter is supplying the place itself (E.safe)
 let hog, playerShadow, leash, hemi, sun, sky, water, snow;
 const SKY = { top: '#9fd4f5', haze: '#dfeaf6' };
 // The Gollum Man: a companion on a leash, not a foe. mode 'follow' trots behind the hog; 'stay' holds a pose somewhere.
@@ -346,13 +348,13 @@ function buildGround(L) {
 function loadLevel(i) {
   scene.remove(world.g); world.g = new THREE.Group(); scene.add(world.g);
   solids.length = 0; movers.length = 0;
-  Object.assign(world, { items: [], crows: [], npcs: [], flags: [], triggers: [], tick: [], draw: [], rings: [], foodGot: 0, foodTotal: 0, target: null, windX: 0, windZ: 0, killY: -22, index: i });
+  Object.assign(world, { items: [], crows: [], npcs: [], flags: [], triggers: [], tick: [], draw: [], rings: [], sauce: [], foodGot: 0, foodTotal: 0, target: null, relic: null, finishing: false, windX: 0, windZ: 0, killY: -22, index: i });
   const L = world.level = LEVELS[i];
   buildGround(L); setAmbience(L.ambience, true);
   GOL.on = false; GOL.mode = 'follow'; GOL.cower = false; mountGollum(false); nearNpc = null;
   L.build(E);
   const [sx, sz, dx, dz] = L.start; P.x = sx; P.z = sz; P.y = groundBelow(sx, sz, 999); P.vx = P.vy = P.vz = 0; P.dirX = dx; P.dirZ = dz; P.hp = P.maxHp; P.fuel = Math.max(P.fuel, 0.45); P.dead = 0; P.inv = 0; P.charge = 0; P.frozen = false;
-  checkpoint = { x: P.x, y: P.y, z: P.z }; lastSafe = { ...checkpoint }; P.gy = P.y;
+  checkpoint = { x: P.x, y: P.y, z: P.z }; lastSafe = { ...checkpoint }; liveSafe = false; P.gy = P.y;
   cam.yaw = Math.atan2(-dx, -dz); cam.pitch = 0.34; cam.dist = cam.cur = 15; cam.tgt.set(P.x, P.y + 2.4, P.z);
   if (GOL.on) { GOL.x = P.x - dx * 3 + dz * 1.5; GOL.z = P.z - dz * 3 - dx * 1.5; GOL.y = groundBelow(GOL.x, GOL.z, 999); }
   hog.yaw = Math.atan2(dx, dz); updateHUD();
@@ -365,6 +367,7 @@ function updateHUD() {
   const hs = $('hearts'); while (hs.children.length < P.maxHp) hs.appendChild(document.createElement('i'));
   [...hs.children].forEach((h, i) => h.classList.toggle('off', i >= P.hp));
   $('food').textContent = `${world.foodGot}/${world.foodTotal}`;
+  const L = world.level; $('sauce').hidden = !(L && L.side); if (L && L.side) $('sauce').textContent = `HOT SAUCE ${Progress.sauceIn(Progress.load(), L.id)}/${Progress.BOTTLES}`;
 }
 function setObjective(t, target) { $('objective').textContent = t; world.target = target === undefined ? world.target : target; }
 let toastT = 0, barkT = 0;
@@ -492,8 +495,8 @@ function stepPlayer(dt) {
   const beat = Math.floor(P.anim * 13 / Math.PI); if (beat !== P.hoof) { P.hoof = beat; if (moving && P.grounded) Sound.hoof(); }
   if (P.grounded && moving && P.charge <= 0 && Math.random() < dt * 9) puff(P.x - P.dirX * 1.2, P.y + 0.2, P.z - P.dirZ * 1.2, 0xe6dcc0, 1, 1, 0.4, 0.35, 0.8);
   P.safeT -= dt;
-  if (P.grounded && P.safeT <= 0 && !P.sliding && !icy && P.y > world.waterY + 0.3 && (!P.ground || P.ground.dz === undefined)) { P.safeT = 0.4; const [gx, gz] = P.ground ? [0, 0] : terrainGrad(P.x, P.z, 1.6); if (Math.hypot(gx, gz) < 0.5) lastSafe = { x: P.x, y: P.y, z: P.z }; }
-  if (P.y < world.waterY - 0.4 && terrainH(P.x, P.z) < world.waterY) fall(true); else if (P.y < Math.max(world.killY, P.gy - 34)) fall(false);   // into the void, or simply a very long way down
+  if (P.grounded && P.safeT <= 0 && !P.sliding && !icy && !liveSafe && P.y > world.waterY + 0.3 && (!P.ground || P.ground.dz === undefined) && !(world.level.nosafe && world.level.nosafe(P.x, P.z))) { P.safeT = 0.4; const [gx, gz] = P.ground ? [0, 0] : terrainGrad(P.x, P.z, 1.6); if (Math.hypot(gx, gz) < 0.5) lastSafe = { x: P.x, y: P.y, z: P.z }; }
+  if (P.y < world.waterY - 0.4 && terrainH(P.x, P.z) < world.waterY) fall(true); else if (P.y < Math.max(world.killY, P.gy - (world.level.drop || 34))) fall(false);   // into the void, or simply a very long way down
   P.fuel = Math.min(1, P.fuel + (P.fuel < 0.25 ? 0.035 * dt : 0));
 }
 
@@ -534,7 +537,19 @@ function addItem(type, x, z, y) {
   const s = Models.buildFood(type); world.g.add(s); const it = { type, x, z, y: y ?? groundBelow(x, z, 999) + 1.5, s, taken: false, ph: rnd() * TAU, drop: 0 };
   s.position.set(x, it.y, z); world.items.push(it); world.foodTotal++; return it;
 }
+// Hot sauce: five bottles to a side road. One already found (in an earlier visit) shows as a ghost of itself.
+function addSauce(k, x, z, y) {
+  const had = !!((Progress.load().sauce[world.level.id] || 0) >> k & 1), s = Models.buildSauce(); world.g.add(s);
+  if (had) s.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.3; } });
+  const it = { k, x, z, y: y ?? groundBelow(x, z, 999) + 1.7, s, taken: false, had }; s.position.set(x, it.y, z); world.sauce.push(it); return it;
+}
 function stepItems(dt) {
+  for (const it of world.sauce) if (!it.taken && (it.x - P.x) ** 2 + (it.z - P.z) ** 2 < 3.6 && Math.abs(P.y + 1.5 - it.y) < 2.5 && P.dead <= 0) {
+    it.taken = true; it.s.visible = false; puff(it.x, it.y, it.z, 0xff5a3a, 12, 5, 0.4, 0.6, 2);
+    if (it.had) { Sound.eat(); continue; }
+    const pr = Progress.load(), id = world.level.id; pr.sauce[id] = (pr.sauce[id] || 0) | 1 << it.k; Progress.save(pr);
+    Sound.heal(); toast(`Hot sauce! ${Progress.sauceIn(pr, id)} of ${Progress.BOTTLES}`, 2.6); updateHUD();
+  }
   for (const it of world.items) {
     if (it.taken) continue;
     if (it.drop > 0) { it.drop -= dt; continue; }
@@ -568,8 +583,8 @@ function addNpc(o) {       // o: { m, anim, spr, name, x, z, lines, onTalk, yaw 
   const n = { ...o, y, i: 0, yaw0: o.m.yaw, body: addCyl(o.x, o.z, 0.8, 0.8, y - 2, y + 4, false) }; world.npcs.push(n); return n;
 }
 // (x, z) is where the hog reappears; the pole stands ox to the side of it. Keep (x, z) on solid ground.
-function addFlag(x, z, ox = 3) {
-  const y = groundBelow(x, z, 999); mesh(new THREE.CylinderGeometry(0.1, 0.1, 4, 5), M.woodDark, x + ox, y + 2, z);
+function addFlag(x, z, ox = 3, y0) {
+  const y = y0 ?? groundBelow(x, z, 999); mesh(new THREE.CylinderGeometry(0.1, 0.1, 4, 5), M.woodDark, x + ox, y + 2, z);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1.8, -0.5, 0, 0, -1, 0]), 3));
   const f = new THREE.Mesh(g, M.flag); f.position.set(x + ox, y + 4, z); world.g.add(f); world.flags.push({ x, y, z, f, on: false });
 }
@@ -578,7 +593,7 @@ function addTrigger(x, z, r, fn, o = {}) { const t = { x, z, r, fn, done: false,
 let nearNpc = null;
 function stepWorld() {
   for (const f of world.flags) if (!f.on && Math.hypot(P.x - f.x, P.z - f.z) < 7 && Math.abs(P.y - f.y) < 4 && P.grounded) {
-    world.flags.forEach(o => { o.on = false; o.f.material = M.flag; }); f.on = true; f.f.material = M.flagOn; checkpoint = { x: f.x, y: f.y, z: f.z }; Sound.check(); toast('Checkpoint'); }
+    world.flags.forEach(o => { o.on = false; o.f.material = M.flag; }); f.on = true; f.f.material = M.flagOn; checkpoint = { x: f.x, y: f.y, z: f.z }; liveSafe = false; Sound.check(); toast('Checkpoint'); }
   for (const t of world.triggers) if (!t.done && state === 'play' && P.dead <= 0 && Math.hypot(P.x - t.x, P.z - t.z) < t.r && Math.abs(P.y - t.y) < 6) { t.done = !t.repeat; t.fn(E); if (state !== 'play') break; }
   nearNpc = null;
   if (state === 'play') for (const n of world.npcs) if (!n.gone && Math.hypot(P.x - n.x, P.z - n.z) < (n.reach || 5.5) && Math.abs(P.y - n.y) < 3) nearNpc = n;
@@ -853,6 +868,7 @@ function updateVisuals(dt) {
     hog.g.visible = state === 'title' ? false : !(P.inv > 0 && P.dead <= 0 && Math.floor(time * 14) % 2);
     placeShadow(playerShadow, P.x, P.y, P.z); playerShadow.visible = state !== 'title';
   }
+  for (const it of world.sauce) if (!it.taken) { it.s.rotation.y = time * 2.2 + it.k; it.s.position.y = it.y + Math.sin(time * 2.4 + it.k) * 0.2; }
   for (const it of world.items) if (!it.taken) { it.s.rotation.y = time * 1.8 + it.ph; it.s.position.y = it.y + Math.sin(time * 2 + it.ph) * 0.18; it.s.visible = it.drop <= 0; }
   for (const c of world.crows) if (c.alive) { const d = Math.sign(c.spd); Models.animCrow(c.m, { dirX: -Math.sin(c.ang) * d, dirZ: Math.cos(c.ang) * d, time, phase: c.cx, bank: d }, dt); c.s.position.set(c.x, c.y + 1, c.z); placeShadow(c.shadow, c.x, c.y, c.z); }
   for (const n of world.npcs) if (!n.gone) (n.anim || Models.animNpc)(n.m, { time, yaw: n.fixed ? n.yaw0 : Math.hypot(P.x - n.x, P.z - n.z) < 22 ? Math.atan2(P.x - n.x, P.z - n.z) : n.yaw0, talking: state === 'dialog' && nearNpc === n, pose: n.pose }, dt);
@@ -879,7 +895,7 @@ function frame(dt) {
   if (HIT.KeyM) toast(Sound.toggle() ? 'Sound off' : 'Sound on', 1);
   if (state === 'play') {
     if (cardDue) { cardDue = false; chapterCard(world.level); }                 // once the opening pages are turned
-    if (HIT.Escape || HIT.KeyP) { state = 'pause'; $('pause').hidden = false; }
+    if (HIT.Escape || HIT.KeyP) { state = 'pause'; $('pause').hidden = false; $('pause-hub').hidden = !Progress.load().pro; }
     else {
       if (HIT.Space) P.jumpBuf = 0.13;
       if (HIT.ShiftLeft || HIT.ShiftRight || HIT.KeyF) P.wantCharge = true;
@@ -888,14 +904,16 @@ function frame(dt) {
       if (state === 'play') stepWorld();
       updateCamera(dt);
     }
-  } else if (state === 'pause') { if (HIT.Escape || HIT.KeyP || HIT.Enter) { state = 'play'; $('pause').hidden = true; }
+  } else if (state === 'pause') {
+    if (HIT.KeyH && Progress.load().pro) toHub(`&from=${world.index + 1}`);                    // give the chapter up for now
+    else if (HIT.Escape || HIT.KeyP || HIT.Enter) { state = 'play'; $('pause').hidden = true; }
   } else if (state === 'dialog') { time += dt; tickDialog(dt); updateCamera(dt);
   } else if (state === 'pages') { time += dt; if (HIT.Enter || HIT.Space || HIT.KeyE) turnPage(false); else if (HIT.Escape) turnPage(true); if (state !== 'pages') updateCamera(dt);
   } else if (state === 'fly') { time += dt; stepFlight(dt);
   } else if (state === 'cine') { time += dt; stepCine(dt, HIT.Enter || HIT.Escape);
   } else if (state === 'title' || state === 'end') {
     time += dt; cam.yaw += dt * 0.1; cam.pitch = 0.3; cam.cur = cam.dist = 34; const [sx, sz] = world.level.start; cam.tgt.set(sx, groundBelow(sx, sz, 999) + 6, sz - 20); updateCamera(dt, false);
-    if (state === 'title' && (HIT.Enter || HIT.Space)) { if (saved() > 0) startGame(saved()); else startPrologue(); }
+    if (state === 'title' && (HIT.Enter || HIT.Space)) { if (Progress.load().pro) toHub(); else startPrologue(); }
   }
   updateVisuals(dt);
   renderer.render(scene, camera);
@@ -904,31 +922,67 @@ function frame(dt) {
 let lastT = 0, cardDue = false;
 function loop(t) { const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t; frame(dt); requestAnimationFrame(loop); }
 
-function saved() { try { return clamp(parseInt(localStorage.getItem('hogSaga.chapter') || '0', 10) || 0, 0, LEVELS.length - 1); } catch { return 0; } }
 function beginLevel(i) {
   loadLevel(i); state = 'play'; $('hud').hidden = false;
-  try { localStorage.setItem('hogSaga.chapter', String(i)); } catch { /* private window: no saving */ }   // progress is the chapter reached (the title's backdrop load must not overwrite it) $('hud').classList.remove('flying'); $('bark').hidden = true; $('book').hidden = true; $('dialog').hidden = true;
+  $('hud').classList.remove('flying'); $('bark').hidden = true; $('book').hidden = true; $('dialog').hidden = true;
   cardDue = true; world.level.begin(E);
 }
-function startGame(i) {
+// Progress (hog-progress.js) is the chapters finished. The windmill country (hog3d.html?hub) is the hub they open
+// off: each chapter is entered through a door there (./?level=n) and, once finished, hands back to it.
+let leaving = false;
+function toHub(q = '', ms = 500) {
+  if (leaving) return; leaving = true; P.frozen = true; $('fade').style.opacity = 1;
+  setTimeout(() => { location.href = 'hog3d.html?hub' + q; }, ms);
+}
+// SKIP THE PROLOGUE: the two pages that open the book, and straight into chapter 1.
+function startGame() {
   if (state !== 'title') return;
   Sound.init(); $('title').hidden = true; P.maxHp = 4; playTime = 0; deaths = 0; foodAll = 0;
-  if (i === 0) { state = 'play'; pages([2, 3], () => beginLevel(0)); } else beginLevel(i);
+  const pr = Progress.load(); pr.pro = true; Progress.save(pr);
+  state = 'play'; pages([2, 3], () => beginLevel(0));
 }
 // A new game opens with the book's first page, then the prologue (the windmill level, hog3d.html), which
 // tells how the Hog Man came by the Gollum Man and comes back here as ?from=prologue for chapter 1.
+let sure = false;
 function startPrologue() {
   if (state !== 'title') return;
-  Sound.init(); $('title').hidden = true; state = 'play';
+  if (Progress.load().pro && !sure) { sure = true; $('start').textContent = 'SURE? THIS ERASES YOUR PROGRESS'; return; }      // a second press means it
+  Sound.init(); $('title').hidden = true; state = 'play'; Progress.save({ pro: false, done: 0, open: 1 });
   pages([2], () => { $('fade').style.opacity = 1; setTimeout(() => { location.href = 'hog3d.html?saga'; }, 320); });
 }
-function completeLevel() {
-  if (P.frozen) return; const next = world.index + 1;
+// The chapter's golden food. It rises from where its keeper fell (from: [x, y, z]) or drops out of the sky,
+// comes to hang over the hog, and is his. The camera stays where play left it: that spot is known to be clear.
+function awardRelic(from, then) {
+  const R = Progress.RELICS[world.index];
+  if (!R || world.relic) { if (then) then(); return; }
+  const m = world.relic = Models.buildRelic(R.id); world.g.add(m);
+  const a = from ? { x: from[0], y: from[1], z: from[2] } : { x: P.x + P.dirX * 4, y: P.y + 16, z: P.z + P.dirZ * 4 };
+  let t0 = 0, said = false;
+  world.draw.push({ draw(dt) {
+    t0 += dt; const k = sstep(0.3, 2.4, t0);
+    m.position.set(lerp(a.x, P.x, k), lerp(a.y, P.y + 5.3, k) + Math.sin(k * Math.PI) * 2.5 + Math.sin(time * 3) * 0.12, lerp(a.z, P.z, k)); m.rotation.y = time * 2.6;
+    if (Math.random() < dt * 14) puff(m.position.x + (Math.random() - 0.5) * 1.6, m.position.y + (Math.random() - 0.5) * 1.2, m.position.z + (Math.random() - 0.5) * 1.6, 0xffe27a, 1, 0.5, 0.2, 0.5, 1.2);
+  } });
   Sound.win();
-  if (next < LEVELS.length) fadeThen(() => beginLevel(next), 900);
-  else fadeThen(() => { state = 'end'; $('hud').hidden = true; try { localStorage.setItem('hogSaga.chapter', '0'); } catch { /* fine */ }
+  startCine({ dur: 5.2, step(t) { if (!said && t > 2.3) { said = true; Sound.heal(); toast(`${R.name}! ${R.power}`, 4); } }, done() { if (then) then(); } });
+}
+function completeLevel(from) {
+  if (P.frozen || world.finishing) return; world.finishing = true;
+  if (world.level.side || world.index === MAIN - 1) finishLevel(); else awardRelic(Array.isArray(from) ? from : null, finishLevel);
+}
+function finishLevel() {
+  const i = world.index, pr = Progress.load();
+  if (world.level.side) {                                  // a side road: no golden food, just the sauce found along it
+    const id = world.level.id; if (!pr.sides.includes(id)) pr.sides.push(id); Progress.save(pr); Sound.win();
+    toast(`${world.level.title}: hot sauce ${Progress.sauceIn(pr, id)} of ${Progress.BOTTLES}`, 3); return toHub(`&from=${i + 1}`, 2200);
+  }
+  const fresh = pr.done < i + 1, back = `&from=${i + 1}${fresh ? '&new' : ''}`;
+  pr.pro = true; pr.done = Math.max(pr.done, i + 1); Progress.save(pr); Sound.win();
+  if (i + 1 < MAIN) return toHub(back, 900);
+  fadeThen(() => { state = 'end'; $('hud').hidden = true;
     const m = Math.floor(playTime / 60), s = Math.floor(playTime % 60);
-    $('end-stats').innerHTML = `Time ${m}:${String(s).padStart(2, '0')}<br>Morsels eaten ${foodAll}<br>Tumbles ${deaths}` + (fly.rings.length ? `<br>Rings ${fly.got}/${fly.rings.length}` : '');
+    $('end-stats').innerHTML = `The Food of the Lamp is yours.<br>Time ${m}:${String(s).padStart(2, '0')}<br>Morsels eaten ${foodAll}<br>Tumbles ${deaths}` + (fly.rings.length ? `<br>Rings ${fly.got}/${fly.rings.length}` : '');
+    $('again').onclick = () => toHub(back);
     hog.g.rotation.set(0, 0, 0); loadLevel(0); $('end').hidden = false; }, 900);
 }
 
@@ -937,11 +991,14 @@ const E = {
   THREE, Models, M, P, GOL, world, cam, camera, lam, rep, mesh, makeShadow, puff, Sound, cutscene: startCine,
   h: terrainH, ground: (x, z) => groundBelow(x, z, 999), addCyl, addBox, movers,
   put(m, x, z, yaw = 0, sink = 0.2) { m.position.set(x, groundBelow(x, z, 999) - sink, z); m.rotation.y = yaw; world.g.add(m); return m; },
-  item: addItem, crow: addCrow, npc: addNpc, flag: addFlag, trigger: addTrigger,
+  item: addItem, crow: addCrow, npc: addNpc, flag: addFlag, trigger: addTrigger, sauce: addSauce,
+  // safe(o): where the hog comes back after a fall, as an object read at that moment (so it can be a raft that has moved on).
+  safe(o) { lastSafe = checkpoint = o; liveSafe = true; },
+  tide(y) { world.waterY = y; water.position.y = y; },             // the water (or the salsa) rises and falls
   line(type, x0, z0, x1, z1, n) { for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : i / (n - 1); addItem(type, lerp(x0, x1, t), lerp(z0, z1, t)); } },
   ring(o) { world.rings.push(o); return o; },
   light(x, y, z, colour = 0xffb060, strength = 60, reach = 40) { const l = new THREE.PointLight(colour, strength, reach, 1.6); l.position.set(x, y, z); world.g.add(l); return l; },
-  say, pages, bark, toast, objective: setObjective, ambience: setAmbience, hurt, complete: completeLevel,
+  say, pages, bark, toast, objective: setObjective, ambience: setAmbience, hurt, complete: completeLevel, relic: awardRelic,
   troll: spawnTroll, maiden: spawnMaiden, thrower: spawnThrower, caster: spawnCaster, rollers: spawnRollers, actor, flight: startFlight,
   // indoors: look down over the walls rather than be squeezed against them
   teleport(x, z, dirX, dirZ, then, amb2, indoors) { fadeThen(() => { if (amb2) setAmbience(amb2, true); cam.pitch = indoors ? 0.82 : 0.34; cam.dist = cam.cur = indoors ? 12.5 : 15; P.x = x; P.z = z; P.y = groundBelow(x, z, 999); P.vx = P.vy = P.vz = 0; P.dirX = dirX; P.dirZ = dirZ; P.charge = 0; P.gy = P.y; cam.yaw = Math.atan2(-dirX, -dirZ); cam.tgt.set(P.x, P.y + 2.4, P.z); lastSafe = { x, y: P.y, z }; checkpoint = { ...lastSafe }; hog.yaw = Math.atan2(dirX, dirZ); if (then) then(); }, 450); },
@@ -968,9 +1025,9 @@ async function boot() {
   $('foodicon').src = pic('taco');
   const lv = parseInt(new URLSearchParams(location.search).get('level') || '', 10);
   loadLevel(0); state = 'title';
-  const cont = saved(); $('continue').hidden = cont === 0; if (cont > 0) $('continue').textContent = `CONTINUE — ${LEVELS[cont].title.toUpperCase()}`;
-  $('start').disabled = false; $('start').textContent = 'NEW GAME'; $('start').onclick = startPrologue; $('skip').onclick = () => startGame(0); $('continue').onclick = () => startGame(cont);
-  $('again').onclick = () => location.reload(); $('dialog').onclick = () => { if (state === 'dialog') advanceDialog(); }; $('book').onclick = () => { if (state === 'pages') turnPage(false); };
+  const pr = Progress.load(); $('continue').hidden = !pr.pro; if (pr.pro) $('continue').textContent = `CONTINUE — GOLDEN FOODS ${pr.done}/${MAIN}`;
+  $('start').disabled = false; $('start').textContent = 'NEW GAME'; $('start').onclick = startPrologue; $('skip').onclick = startGame; $('continue').onclick = () => { if (state === 'title') toHub(); };
+  $('dialog').onclick = () => { if (state === 'dialog') advanceDialog(); }; $('book').onclick = () => { if (state === 'pages') turnPage(false); };
   requestAnimationFrame(loop);
   if (lv >= 1 && lv <= LEVELS.length) { Sound.init(); $('title').hidden = true; beginLevel(lv - 1); }
   else if (new URLSearchParams(location.search).get('from') === 'prologue') {       // back from the prologue: the page that introduces the pair, then chapter 1

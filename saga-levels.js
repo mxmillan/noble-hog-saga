@@ -144,7 +144,7 @@ const L1 = {
       onHit: T => E.objective(`Fell the Tile Troll  ${pips(T.hp, 3)}`),
       onDefeat: T => E.later(1.4, () => {                 // "With a burst of light he cast the Tile Troll into exile."
         E.flash('#fff', 1100); T.state = 'gone'; E.puff(T.x, T.y + 3, T.z, 0xffe9a0, 30, 12, 1.2, 1.2, 5); E.Sound.bolt(); E.GOL.cower = false;
-        E.pages([8], () => E.say([['wizard', 'The Wizard', 'Exile! Staff blazing, pint untouched. Onward, hog-rider — the cold mountain will not climb itself.'], ['gollum', 'The Gollum Man', 'It is gone! The square-man is gone! We wept. We is not ashamed.']], () => E.complete()));
+        E.pages([8], () => E.say([['wizard', 'The Wizard', 'Exile! Staff blazing, pint untouched. Onward, hog-rider — the cold mountain will not climb itself.'], ['gollum', 'The Gollum Man', 'It is gone! The square-man is gone! We wept. We is not ashamed.']], () => E.complete([T.x, T.y + 3, T.z])));
       }) });
     E.trigger(-5, GLADE.z - 1, 20, () => E.pages([7], () => { troll.wake(); E.GOL.cower = true; E.objective('Fell the Tile Troll  ●●●', null); E.bark('troll', 'TILE TROLL: Who disturbs my supper? I shall GROUT you where you stand! (Charge him — and mind the tiles.)', 6); }));
   },
@@ -224,7 +224,7 @@ const L2 = {
     E.trigger(mx, mz, 13, () => E.pages([14, 15], () => E.say([
       ['maiden', 'The Shield-Maiden', 'That one. The small, damp one. He comes with me.'],
       ['gollum', 'The Gollum Man', 'No! Nooo! Hog Man! It has our leash! IT HAS OUR—'],
-    ], () => { E.gollum(false); shade.g.visible = false; E.puff(mx, E.ground(mx, mz) + 2, mz, 0x333340, 18, 6, 0.9, 0.8, 2); E.pages([16], () => E.complete()); })));
+    ], () => { E.gollum(false); shade.g.visible = false; E.puff(mx, E.ground(mx, mz) + 2, mz, 0x333340, 18, 6, 0.9, 0.8, 2); E.pages([16], () => E.complete([mx, E.ground(mx, mz) + 3, mz])); })));
   },
   begin(E) { E.gollum(true); E.pages([9], () => E.objective('Climb the cold mountain', T2.at(166))); },
 };
@@ -321,7 +321,8 @@ const L3 = {
       onHit: A => E.objective(`Best the shield-maiden  ${pips(A.hp, 3)}`),
       onDefeat: () => E.later(0.9, () => {          // "…burst forth from the maiden's lair, their hog thundering into the gloom"
         E.gollum(true, { mode: 'ride' }); slab.visible = false; E.puff(slab.position.x, 9, THR.z, 0x6a6470, 22, 8, 1.0, 0.9, 3); E.Sound.thud(); arena.gate = 0;
-        E.pages([26], () => { E.objective('Burst forth from the lair!', [ESC.exit, THR.z]); E.bark('gollum', 'THE GOLLUM MAN: Up! Up on the hog! East, Hog Man — and do not stop on the stones!', 5); });
+        // She gives up the chapter's golden food here, where she falls; the chapter itself ends at the tunnel's mouth.
+        E.relic([maiden.x, maiden.y + 3, maiden.z], () => E.pages([26], () => { E.objective('Burst forth from the lair!', [ESC.exit, THR.z]); E.bark('gollum', 'THE GOLLUM MAN: Up! Up on the hog! East, Hog Man — and do not stop on the stones!', 5); }));
       }) });
     L3.reset = () => { E.gollum(true, { mode: 'stay', x: THR.x - 3.5, z: THR.z - 12, hx: 0, hz: 1, frame: 'gol_crouch' }); };
     E.trigger(THR.x, THR.z + 13.5, 4, () => E.pages([25], () => E.say([
@@ -457,6 +458,276 @@ const L4 = {
   begin(E) { E.gollum(true, { mode: 'ride' }); E.pages([28], () => E.objective('Ride to the White Castle', T4.at(160 + S4))); },
 };
 
-export const LEVELS = [L1, L2, L3, L4];
+// ═════════════════════════════ The side roads ═════════════════════════════
+// Four levels that are not in the book. Each has a door in the windmill country (hog3d.js), opens once enough
+// golden foods are held, hides five bottles of hot sauce (E.sauce), and ends by handing back to the hub.
+// The Gollum Man rides throughout: these are all places a creature on a leash would come to grief.
+const MILLDARK = { bg: 0x120c08, fog: 0x120c08, near: 30, far: 115, hemi: [0xc8a880, 0x3a2a1c, 1.3], sun: [0xffd8a8, 0.75] };
+const MOLTEN = { bg: 0x2a1410, fog: 0x3a1c14, near: 40, far: 270, hemi: [0xffc8a0, 0x4a1a10, 1.35], sun: [0xffb070, 1.25], water: [6, 0xd23a1e] };
+const LANTERNS = { bg: 0x0a0f24, fog: 0x0a0f24, near: 30, far: 150, hemi: [0xa8b4ff, 0x30243a, 1.3], sun: [0xffd8a0, 0.75] };
+// The way out: a door like the ones in the hub. Riding into it finishes the level.
+function exitDoor(E, x, z, yaw, y) {
+  const p = E.Models.buildPortal({ colour: 0xffd27a }), gy = y ?? E.ground(x, z); p.g.position.set(x, gy - 0.1, z); p.g.rotation.y = yaw; E.world.g.add(p.g);
+  const sx = Math.cos(yaw), sz = -Math.sin(yaw); for (const k of [1, -1]) E.addCyl(x + sx * k * 2.65, z + sz * k * 2.65, 0.75, 0.75, gy - 2, gy + 7, false);
+  E.actor({ step() {}, draw() { p.film.material.map.offset.y = E.time * 0.22; } });
+  E.trigger(x, z, 2.1, () => E.complete(), { y: gy });
+}
+
+// ───────────────────────────── The Long Water ─────────────────────────────
+// A raft ride. The river carries the raft; the hog has only to stay on it. Rocks sweep him off unless he
+// steps round them, beams knock him off unless he jumps them. A fall puts him back on the raft, a heart poorer.
+const TF = makeTrail([[0, 0], [0, -60], [14, -120], [14, -190], [-10, -250], [-10, -330], [0, -380], [0, -436]]);
+const RIVERF = [10, 406], RAFT = { r: 3.5, top: 6.45, s0: 12.6, s1: 406.5, speed: 7.5, rapids: [196, 256] };      // at each end it is drawn up over the bank, so there is no gap to step across
+const ROCKSF = [[44, 2.2], [62, -2.2], [80, 2.4], [92, -2.4], [104, 2.2], [132, -2], [141, 2.2], [160, -2.4], [186, 2.2], [204, -2.4], [214, 2.4], [228, -2.2], [240, 2.2],
+  [262, -2.4], [272, 2.4], [300, -2.2], [330, 2.2], [346, -2.4], [356, 2.4], [372, -2.2], [382, 2.4]];
+const BEAMSF = [50, 150, 172, 286, 310, 320, 394];       // all on stretches that run due north: a beam is an axis-aligned box
+const wetF = s => sstep(RIVERF[0], RIVERF[0] + 4, s) * sstep(RIVERF[1] + 2, RIVERF[1] - 2, s);
+const LF = {
+  side: true, id: 'ferry', chapter: 'A Side Road', title: 'The Long Water', bounds: [-42, 46, -458, 28], start: [0, -3, 0, -1], ambience: DAY,
+  height(x, z) { const t = TF.locate(x, z); return 6.5 - 5.5 * wetF(t.s) + edge(Math.abs(t.d) - 10, 'wall', x, z, 17); },
+  tint(c, x, z, h, ny) { const t = TF.locate(x, z); if (h < 5.5) c.set(0x5a6a58); else if (ny < 0.74) c.set(0x7a7468); else c.set((t.s < 12 || t.s > 404) && Math.abs(t.d) < 9.5 ? 0xd9c48a : 0x6fa84a); },
+  build(E) {
+    const { THREE, Models, M, P } = E, at = (s, lat = 0) => TF.at(s, lat);
+    // The raft: a round deck of planks on barrels. It sets off when the hog steps aboard and stops at the far shore.
+    const g = new THREE.Group(), [rx, rz] = at(RAFT.s0); E.world.g.add(g);
+    E.mesh(new THREE.CylinderGeometry(RAFT.r, RAFT.r, 0.5, 10), E.lam(0xffffff, E.rep(M.tex.wood, 2, 2)), 0, -0.25, 0, g);
+    for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.4; E.mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.7, 8).rotateZ(Math.PI / 2), M.woodDark, Math.cos(a) * 2.3, -0.8, Math.sin(a) * 2.3, g).rotation.y = -a; }
+    const raft = E.addCyl(rx, rz, RAFT.r, RAFT.r, RAFT.top - 0.9, RAFT.top, true); raft.dx = 0; raft.dz = 0; raft.u = RAFT.s0; raft.going = false;
+    raft.update = dt => {
+      if (!raft.going && P.grounded && P.ground === raft) {
+        raft.going = true; E.safe({ get x() { return raft.x; }, get z() { return raft.z; }, y: RAFT.top }); E.objective('Stay on the raft', at(RAFT.s1)); E.toast('Step round the rocks. Jump the beams.', 4);
+      }
+      const fast = raft.u > RAFT.rapids[0] && raft.u < RAFT.rapids[1], u = raft.going ? Math.min(RAFT.s1, raft.u + (fast ? 10 : RAFT.speed) * dt) : raft.u, [x, z] = at(u);
+      raft.dx = x - raft.x; raft.dz = z - raft.z; raft.x = x; raft.z = z; raft.u = u; g.position.set(x, RAFT.top + Math.sin(E.time * 2) * 0.04, z); if (raft.going && u < RAFT.s1) g.rotation.y += dt * 0.06;
+      if (u >= RAFT.s1 && !raft.done) { raft.done = true; E.objective('Step ashore', at(432)); }
+    };
+    E.movers.push(raft); LF.raft = raft;
+    // Rocks standing in the stream, to one side or the other.
+    for (const [s, lat] of ROCKSF) { const [x, z] = at(s, lat), m = E.mesh(new THREE.CylinderGeometry(1.2, 1.9, 9.5, 7), M.rock, x, 5.2, z); m.rotation.y = s; E.addCyl(x, z, 1.5, 1.5, 0, 12, false); }
+    // Fallen trunks across it from bank to bank, a little above the deck.
+    for (const s of BEAMSF) {
+      const [x, z] = at(s); E.mesh(new THREE.CylinderGeometry(0.55, 0.6, 25, 7).rotateZ(Math.PI / 2), M.trunk, x, 8.1, z); E.addBox(x - 12.5, x + 12.5, z - 0.5, z + 0.5, 7.5, 8.7, false);
+      for (const sd of [-1, 1]) E.mesh(new THREE.CylinderGeometry(0.5, 0.6, 9, 6), M.trunk, x + sd * 10.4, 4.4, z);
+      E.item('burger', x, z, 10.9);
+    }
+    pines(E, TF, 18, 402, 11.5, { seed: 5, step: 12 });
+    for (const [s, sp] of [[118, 3.2], [352, -3.2]]) { const [x, z] = at(s); E.crow(x, z, 3.3, sp, 7.3); }
+    for (const [s, lat] of [[22, 0], [26, 0], [36, 0], [68, 2.2], [72, 2.2], [86, -2.2], [98, 2.2], [124, 0], [128, 0], [146, -1], [166, 1], [180, 0], [198, 2], [220, -2], [246, -2], [268, 2], [278, -2], [294, 0], [304, 1.5], [336, -2], [364, -2], [378, 2]]) { const [x, z] = at(s, lat); E.item('taco', x, z, 8.2); }
+    for (const s of [190, 340]) { const [x, z] = at(s, -1.5); E.item('burrito', x, z, 8.3); }
+    // Hot sauce: a hop, a quick step back across, a boosted jump over a beam, a squeeze in the rapids, and a climb ashore.
+    { const [x, z] = at(30); E.sauce(0, x, z, 11.7); } { const [x, z] = at(110, 2.9); E.sauce(1, x, z, 8.4); } { const [x, z] = at(172); E.sauce(2, x, z, 14.3); } { const [x, z] = at(234, -2.9); E.sauce(3, x, z, 8.4); }
+    { const [x, z] = at(426, 4.6), [x2, z2] = at(426, 7.2), wood = E.lam(0xffffff, E.rep(M.tex.wood, 1, 1));
+      E.mesh(new THREE.BoxGeometry(2.4, 1.7, 2.4), wood, x, 7.35, z); E.addBox(x - 1.2, x + 1.2, z - 1.2, z + 1.2, 5, 8.2, true);
+      E.mesh(new THREE.BoxGeometry(2.6, 3.4, 2.6), wood, x2, 8.2, z2); E.addBox(x2 - 1.3, x2 + 1.3, z2 - 1.3, z2 + 1.3, 5, 9.9, true); E.sauce(4, x2, z2, 11.6); }
+    // The two shores.
+    { const [x, z] = at(6, 5.5); E.put(Models.buildHangingSign(['RAFT', 'NO', 'REFUNDS']), x, z, -0.4, 0.1); E.addCyl(x, z, 0.5, 0.5, -5, 40, false); }
+    { const [x, z] = at(414); E.flag(x, z, -4); } { const [x, z] = at(420, -5.5); E.put(Models.buildCampfire(), x, z, 0, 0); }
+    { const [x, z] = at(436); exitDoor(E, x, z, 0); }
+  },
+  begin(E) { E.gollum(true, { mode: 'ride' }); E.objective('Board the raft', TF.at(RAFT.s0)); E.later(4, () => E.bark('gollum', 'THE GOLLUM MAN: A raft. It goes where the river goes, piggy-man. We cannot swim. We has tried.', 5)); },
+};
+
+// ───────────────────────────── The Belly of the Mill ─────────────────────────────
+// Straight up the inside of the Great Windmill: brackets round the wall, a gear with a sweeping arm, a hoist,
+// rotten boards, and the windshaft at the top. A drop of more than a few yards (drop:) costs a heart.
+const MB = { r: 16, floor: 6.5, landA: [-1.97, -11.33, 21], landB: [-10.63, 4.39, 33.2], landC: [-2.8, 11.15, 47.4], hoist: [-4.58, 10.0], top: [11.2, 1.0, 55.4] };
+const ringM = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
+const LM = {
+  side: true, id: 'mill', chapter: 'A Side Road', title: 'The Belly of the Mill', bounds: [-21, 21, -21, 21], cell: 1.5, start: [7.1, -4.9, 0.57, 0.82], ambience: MILLDARK, drop: 10,      // the start must have nothing overhead: the hog is set on the highest floor at that spot
+  height(x, z) { return Math.hypot(x, z) < 17.3 ? MB.floor : -110; },
+  tint(c, x, z) { c.set((Math.floor(x / 3) + Math.floor(z / 9)) % 2 ? 0x8a6a44 : 0x7a5c3a); },
+  build(E) {
+    const { THREE, Models, M, P } = E, wood = E.lam(0xffffff, E.rep(M.tex.wood, 1.5, 1.5)), rotten = E.lam(0x6a7a4a, E.rep(M.tex.wood, 1.5, 1.5)), iron = E.lam(0x4a4640);
+    E.ring({ x: 0, z: 0, r: MB.r });
+    // The shell is drawn from the inside only, so the camera can stand outside it and still see in.
+    E.mesh(new THREE.CylinderGeometry(16.7, 16.7, 64, 24, 1, true), new THREE.MeshLambertMaterial({ map: E.rep(M.tex.wall, 12, 8), side: THREE.BackSide, flatShading: true }), 0, 37.5, 0);
+    E.mesh(new THREE.ConeGeometry(17, 12, 24, 1, true), new THREE.MeshLambertMaterial({ color: 0x5a3c28, side: THREE.BackSide, flatShading: true }), 0, 75.5, 0);
+    E.mesh(new THREE.CylinderGeometry(1.2, 1.2, 43.8, 9), M.woodDark, 0, 28.4, 0); E.addCyl(0, 0, 1.2, 1.2, MB.floor, 50.3, false);       // the main shaft
+    E.light(0, 17, 6, 0xffc080, 90, 48); E.light(6, 36, -6, 0xffc080, 80, 44); E.light(-5, 54, 5, 0xffd8a0, 80, 44);
+    // A round platform, with a bracket back to the wall if it is near one.
+    const pad = (x, z, top, r = 2.3, mat = wood) => {
+      const m = E.mesh(new THREE.CylinderGeometry(r, r, 0.5, 9), mat, x, top - 0.25, z), d = Math.hypot(x, z), a = Math.atan2(z, x);
+      if (d > 6) { const b = E.mesh(new THREE.BoxGeometry(16.6 - d, 0.3, 0.5), M.woodDark, Math.cos(a) * (d + 16.6) / 2, top - 0.6, Math.sin(a) * (d + 16.6) / 2); b.rotation.y = -a; }
+      const s = E.addCyl(x, z, r, r, top - 0.5, top, true); s.mesh = m; return s;
+    };
+    // A rotten board: it gives way under the hog and springs back when he has gone.
+    const board = (x, z, top) => { const s = pad(x, z, top, 2.3, rotten); s.dx = 0; s.dz = 0;
+      s.update = dt => { const on = P.grounded && P.ground === s; s.y1 = clamp(s.y1 + (on ? -2.3 : 1.6) * dt, top - 9, top); s.y0 = s.y1 - 0.5; s.mesh.position.y = s.y1 - 0.25; }; E.movers.push(s); return s; };
+    // An arm turning about (cx, cz) just above a floor at y. It has to be jumped.
+    const sweeper = (cx, cz, y, len, speed, phase = 0) => {
+      const m = E.mesh(new THREE.BoxGeometry(len * 2, 0.7, 0.7), iron, cx, y + 0.75, cz);
+      E.actor({ step() {
+        const a = E.time * speed + phase, ca = Math.cos(a), sa = Math.sin(a), dx = P.x - cx, dz = P.z - cz, along = dx * ca + dz * sa, off = -dx * sa + dz * ca; m.rotation.y = -a;
+        if (Math.abs(along) < len && Math.abs(along) > 1 && Math.abs(off) < 1.15 && P.y < y + 1.15 && P.y > y - 1.6) { const k = Math.sign(speed) * Math.sign(along); E.hurt(1, -sa * k, ca * k); }
+      }, draw() {} });
+    };
+    // 1. Brackets round the wall, up to the first landing.
+    for (let i = 0; i < 9; i++) { const [x, z] = ringM(0.2 + i * 0.48, 12.5); pad(x, z, 8 + i * 1.5); if (i % 2) E.item('taco', x, z, 9.6 + i * 1.5); }
+    pad(MB.landA[0], MB.landA[1], MB.landA[2], 4.5); E.flag(MB.landA[0], MB.landA[1], 2.6, MB.landA[2]);
+    // 2. The great gear, the lesser gear, and the hoist.
+    const gear = (x, z, top, r) => { E.mesh(new THREE.CylinderGeometry(r, r, 0.9, 16), iron, x, top - 0.45, z); for (let k = 0; k < 14; k++) { const a = k / 14 * TAU; E.mesh(new THREE.BoxGeometry(0.9, 0.8, 0.9), iron, x + Math.cos(a) * (r + 0.25), top - 0.5, z + Math.sin(a) * (r + 0.25)).rotation.y = -a; }
+      E.mesh(new THREE.CylinderGeometry(r - 0.6, r - 0.6, 0.06, 16), wood, x, top + 0.01, z); return E.addCyl(x, z, r, r, top - 0.9, top, true); };
+    gear(0, 0, 22.2, 7); sweeper(0, 0, 22.2, 6.6, 1.1);
+    gear(5.13, 8.0, 24.4, 4); E.item('burger', 5.13, 8.0, 26);
+    { const [hx, hz] = MB.hoist, m = E.mesh(new THREE.BoxGeometry(4.6, 0.6, 4.6), wood, hx, 24, hz), b = E.addBox(hx - 2.3, hx + 2.3, hz - 2.3, hz + 2.3, 23.6, 24.2, true); b.dx = 0; b.dz = 0;
+      for (const [cx, cz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) E.mesh(new THREE.BoxGeometry(0.12, 40, 0.12), iron, cx * 2.1, 20.3, cz * 2.1, m);
+      b.update = () => { b.y1 = 28.5 + 4.3 * Math.sin(E.time * 0.6); b.y0 = b.y1 - 0.6; m.position.y = b.y1 - 0.3; }; E.movers.push(b); LM.hoist = b; }
+    pad(MB.landB[0], MB.landB[1], MB.landB[2], 4.2); E.flag(MB.landB[0], MB.landB[1], 2.2, MB.landB[2]); E.item('burrito', MB.landB[0] - 1.5, MB.landB[1] - 1.5, MB.landB[2] + 1.5);
+    // 3. A second turn of brackets, wider apart, two of them rotten, with bats about.
+    for (let i = 0; i < 8; i++) { const [x, z] = ringM(3.35 + i * 0.6, 12.5), top = 34.8 + i * 1.6; if (i === 2 || i === 5) board(x, z, top); else { pad(x, z, top); if (i % 2 === 0) E.item('taco', x, z, top + 1.6); } }
+    E.crow(0, 0, 12.5, 4, 38.6); E.crow(0, 0, 12.5, -4.4, 44.8);
+    pad(MB.landC[0], MB.landC[1], MB.landC[2], 4.2); E.flag(MB.landC[0], MB.landC[1], 2.4, MB.landC[2]); E.item('burrito', MB.landC[0] - 1.6, MB.landC[1] + 1.4, MB.landC[2] + 1.5);
+    // 4. The windshaft: a beam across the tower with an arm turning over it, and the last few brackets to the cap.
+    E.mesh(new THREE.BoxGeometry(3.2, 0.6, 17), wood, -2.8, 48.7, -0.5); E.addBox(-4.4, -1.2, -9, 8, 48.4, 49, true); sweeper(0, 0, 49, 6.5, 1.25, 1);
+    pad(-2.8, -11.6, 50.6, 3.4); pad(4.2, -11.2, 52.2); pad(9.8, -6.6, 53.8); pad(MB.top[0], MB.top[1], MB.top[2], 4);
+    E.item('taco', 4.2, -11.2, 53.8); E.item('taco', 9.8, -6.6, 55.4);
+    exitDoor(E, 13.3, MB.top[1], -Math.PI / 2, MB.top[2]);
+    // Wheels on the wall, turning for the look of the thing.
+    const wheels = [[2.4, 14, 3.4], [5.2, 30, 2.6], [0.6, 42, 3.8], [3.9, 58, 3]].map(([a, y, r], k) => { const [x, z] = ringM(a, 15.6), w = E.mesh(new THREE.CylinderGeometry(r, r, 0.7, 10).rotateX(Math.PI / 2), k % 2 ? iron : M.woodDark, x, y, z);
+      for (let q = 0; q < 4; q++) E.mesh(new THREE.BoxGeometry(r * 2.3, 0.5, 0.75), iron, 0, 0, 0, w).rotation.z = q * Math.PI / 4; w.rotation.y = Math.PI / 2 - a; return w; });
+    E.actor({ step() {}, draw(dt) { wheels.forEach((w, k) => w.rotateZ((k % 2 ? -0.5 : 0.4) * dt)); } });
+    // Hot sauce: on the floor behind the shaft, on the great gear, on a ledge off the hoist, over a rotten board, over the windshaft.
+    E.sauce(0, 9, -9, 8.3); E.sauce(1, -4.6, 2.4, 24.1);
+    pad(1.5, 12.6, 29, 1.9); E.sauce(2, 1.5, 12.6, 30.8);
+    { const [x, z] = ringM(3.35 + 5 * 0.6, 12.5); E.sauce(3, x, z, 46.8); } E.sauce(4, -2.8, 0, 54.4);
+  },
+  begin(E) { E.gollum(true, { mode: 'ride' }); E.objective('Climb to the cap of the mill', null); E.later(4, () => E.bark('gollum', 'THE GOLLUM MAN: Up, it says. Always up. Mind the arm, Hog Man, it turns for nobody.', 5)); },
+};
+
+// ───────────────────────────── Mount Molcajete ─────────────────────────────
+// A crater lake of salsa that rises and falls. The low causeways drown at high tide; the pools are crossed on
+// tortilla chips; and the last climb, to the great stone bowl on the rim, has tomatoes rolling down it.
+const TV = makeTrail([[0, 0], [0, -50], [30, -90], [30, -150], [-10, -190], [-10, -250], [20, -300], [20, -362]]);
+const LOWV = [[40, 56], [150, 176], [290, 300]], POOLV = [[90, 124], [200, 250]], CLIMBV = [322, 384], TIDEV = { mid: 6.0, swing: 1.3, rate: 0.5 };
+const inV = (list, s) => list.reduce((w, [p, q]) => Math.max(w, sstep(p, p + 2, s) * sstep(q, q - 2, s)), 0);
+const pathV = s => lerp(lerp(8, 6.4, inV(LOWV, s)), 2, inV(POOLV, s)) + 14 * clamp((s - CLIMBV[0]) / (CLIMBV[1] - CLIMBV[0]), 0, 1);
+const halfV = s => lerp(6.5, 10.5, sstep(380, 386, s));
+// [s, lat, kind]: 0 an ordinary chip, 1 one that sinks, 2 one that drifts from side to side
+const CHIPSV = [[94.5, 1.2, 0], [100.7, -1.2, 0], [106.9, 1.2, 0], [113.1, -1.2, 0], [119.3, 0, 0],
+  [204.5, 0, 0], [210.7, 1, 1], [216.9, -0.5, 0], [223.1, 0, 0], [229.5, 0, 2], [235.9, 0, 0], [242.1, 0, 1], [247.4, 0, 0]];
+const LV = {
+  side: true, id: 'molcajete', chapter: 'A Side Road', title: 'Mount Molcajete', bounds: [-76, 96, -436, 70], cell: 2, start: [0, -4, 0, -1], ambience: MOLTEN,
+  height(x, z) { const t = TV.locate(x, z), a = Math.abs(t.d), p = pathV(t.s), hw = halfV(t.s); return Math.max(lerp(p, Math.min(p, 2), sstep(hw, hw + 3.5, a)), 36 * sstep(44, 60, a)); },
+  tint(c, x, z, h, ny) { const t = TV.locate(x, z), a = Math.abs(t.d); if (a > 42) c.set(ny < 0.8 ? 0x3a2c28 : 0x4a3a34); else if (h < 7.6) c.set(0x2c2220); else if (ny < 0.74) c.set(0x3a302c); else c.set(t.s > 384 ? 0x7a6a60 : 0x64544c); },
+  nosafe(x, z) { const s = TV.locate(x, z).s; return LOWV.some(([p, q]) => s > p - 2 && s < q + 2); },       // never put him back on a causeway: it may be under
+  build(E) {
+    const { THREE, Models, M, P } = E, at = (s, lat = 0) => TV.at(s, lat), r = seeded(23);
+    E.actor({ step() { E.tide(TIDEV.mid + TIDEV.swing * Math.sin(E.time * TIDEV.rate)); }, draw() {} });
+    // Tortilla chips. A triangle to look at, a disc to stand on.
+    const corn = E.lam(0xe8b84a), burnt = E.lam(0xb07a2a), TOP = 7.9;
+    for (const [s, lat, kind] of CHIPSV) {
+      const [x, z] = at(s, lat), m = E.mesh(new THREE.CylinderGeometry(3.0, 2.7, 0.5, 3), kind === 1 ? burnt : corn, x, TOP - 0.25, z), c = E.addCyl(x, z, 1.9, 1.9, TOP - 0.6, TOP, true); m.rotation.y = r() * 6;
+      if (kind === 1) { c.dx = 0; c.dz = 0; c.update = dt => { const on = P.grounded && P.ground === c; c.y1 = clamp(c.y1 + (on ? -2 : 1.3) * dt, 4.4, TOP); c.y0 = c.y1 - 0.6; m.position.y = c.y1 - 0.25; }; E.movers.push(c); }
+      if (kind === 2) { c.dx = 0; c.dz = 0; c.update = () => { const nx = x + Math.sin(E.time * 0.8) * 3; c.dx = nx - c.x; c.x = nx; m.position.x = nx; }; E.movers.push(c); }
+      if (kind === 0) E.item('taco', x, z, TOP + 1.5);
+    }
+    // A rock to wait out the tide on, half-way along the long causeway.
+    { const [x, z] = at(163, 0.5); stone(E, x, z, 8.3, 2.1); E.sauce(0, x, z, 10.1); }
+    for (const [s, n] of [[8, 4], [60, 4], [128, 4], [180, 3], [254, 4], [304, 3]]) for (let i = 0; i < n; i++) { const [x, z] = at(s + i * 4.5, Math.sin(s + i * 2) * 3); E.item(i === 2 ? 'burger' : 'taco', x, z); }
+    for (const s of [134, 262]) { const [x, z] = at(s, -3); E.item('burrito', x, z); }
+    for (const [s, sp] of [[72, 5], [272, -5.5]]) { const [x, z] = at(s); E.crow(x, z, 5, sp); }
+    for (const s of [128, 186, 256, 312]) { const [x, z] = at(s); E.flag(x, z, -3.5); }
+    rocks(E, [[6, -22, 1.3], [26, -112, 1.5], [-6, -214, 1.2], [15, -296, 1.4]], 0x3a302c);
+    { const [x, z] = at(34); E.trigger(x, z, 6, () => E.bark('gollum', 'THE GOLLUM MAN: Salsa. A whole lake of it. It comes up and it goes down, piggy-man. Cross when it is down.', 5.5)); }
+    { const [x, z] = at(86); E.trigger(x, z, 6, () => E.toast('Tortilla chips float. The dark ones sink.', 4)); }
+    // The climb, and what comes down it.
+    const tomato = () => { const g = new THREE.Group(), b = E.mesh(new THREE.IcosahedronGeometry(1.25, 1), E.lam(0xd8382c), 0, 0, 0, g); E.mesh(new THREE.ConeGeometry(0.5, 0.4, 5), E.lam(0x3f8a2a), 0, 1.25, 0, b); return g; };
+    E.rollers({ curve: (u, lane) => at(CLIMBV[0] + 2 + u * 60, lane).slice(0, 2), u0: 1, length: 60, speed: 9, period: 2.5, lanes: [-3.2, 0, 3.2, 0], radius: 1.25, make: tomato, colour: 0xd8382c,
+      active: () => TV.locate(P.x, P.z).s > 296 && !E.world.finishing });
+    { const [x, z] = at(318); E.trigger(x, z, 6, () => { E.objective('Climb to the great bowl', at(392)); E.toast('Tomatoes! Step out of their lane, or charge them.', 3.5); }); }
+    // The molcajete: a stone mortar on three legs, full to the brim.
+    { const [x, z] = at(391), y = E.ground(x, z), basalt = E.lam(0x4a4442);
+      E.mesh(new THREE.CylinderGeometry(4.3, 3.1, 2.2, 10), basalt, x, y + 1.1, z); E.mesh(new THREE.CylinderGeometry(3.7, 3.7, 0.12, 10), E.lam(0x7fae3a), x, y + 2.22, z);
+      for (let k = 0; k < 3; k++) { const a = k / 3 * TAU + 0.5; E.mesh(new THREE.CylinderGeometry(0.7, 0.5, 1.4, 6), basalt, x + Math.cos(a) * 3.6, y + 0.5, z + Math.sin(a) * 3.6); }
+      E.addCyl(x, z, 4.3, 3.6, y - 1, y + 2.2, true); E.trigger(x, z, 2.6, () => E.complete(), { y: y + 2.2 }); LV.bowl = [x, z, y + 2.2]; }
+    // Hot sauce: on the waiting rock (above), a chip off to one side, over a sinking chip, an islet in the lake, and in the tomatoes' path.
+    { const [x, z] = at(106.9, -6.3); E.mesh(new THREE.CylinderGeometry(3.0, 2.7, 0.5, 3), corn, x, TOP - 0.25, z); E.addCyl(x, z, 1.9, 1.9, TOP - 0.6, TOP, true); E.sauce(1, x, z, TOP + 1.8); }
+    { const [x, z] = at(242.1); E.sauce(2, x, z, 13.4); }
+    { const [x, z] = at(270, -12.6); stone(E, x, z, 8.2, 2.6); E.sauce(3, x, z, 10); }
+    { const [x, z] = at(356); E.sauce(4, x, z, E.ground(x, z) + 5.4); }
+  },
+  begin(E) { E.gollum(true, { mode: 'ride' }); E.objective('Cross the salsa lake', TV.at(128)); },
+};
+
+// ───────────────────────────── The Night Market ─────────────────────────────
+// A square of stalls, five by five, with alleys between. A thief has the market's hot sauce and must be run
+// down three times: he bolts when the hog comes near, and at each corner turns whichever way leads away.
+const MK = { cells: [-44, -22, 0, 22, 44], half: 7, low: 4.2, tall: 8, roads: [-33, -11, 11, 33] };
+const ROUTEK = [[11, 33], [11, 11], [33, 11], [33, -11], [11, -11], [11, -33], [-11, -33], [-11, -11], [-33, -11], [-33, 11], [-11, 11], [-11, 33]];
+const AWNINGS = [0xc83a2c, 0xe8b23a, 0x3f8a5a, 0x7a4a9a, 0x2f6aa8, 0xd8703a];
+const LK = {
+  side: true, id: 'market', chapter: 'A Side Road', title: 'The Night Market', bounds: [-72, 72, -72, 72], start: [11, 56, 0, -1], ambience: LANTERNS,
+  height(x, z) { return 6.5 + edge(Math.max(Math.abs(x), Math.abs(z)) - 59, 'wall', x, z, 14); },
+  tint(c, x, z, h, ny) { if (ny < 0.74) c.set(0x3a3440); else c.set((Math.floor(x / 3) + Math.floor(z / 3)) % 2 ? 0x6a6470 : 0x5c5664); },
+  build(E) {
+    const { THREE, Models, M, P } = E, r = seeded(31), wood = E.lam(0xffffff, E.rep(M.tex.wood, 3, 1)), lamp = new THREE.MeshBasicMaterial({ color: 0xffc860 }), lampG = new THREE.BoxGeometry(0.5, 0.6, 0.5);
+    const tall = (cx, cz) => (cx === 22 && cz === -22) || (cx === -44 && cz === 44), roofOf = (cx, cz) => 6.5 + (tall(cx, cz) ? MK.tall : MK.low);
+    // The stalls. Every roof can be stood on, and the alleys are narrow enough to leap from one to the next.
+    let n = 0;
+    for (const cx of MK.cells) for (const cz of MK.cells) {
+      if (!cx && !cz) continue;                             // the middle of the market is an open square
+      const top = roofOf(cx, cz), hgt = top - 6.5, col = AWNINGS[n++ % AWNINGS.length];
+      E.mesh(new THREE.BoxGeometry(13.4, hgt - 0.3, 13.4), wood, cx, 6.5 + (hgt - 0.3) / 2, cz); E.mesh(new THREE.BoxGeometry(14.6, 0.4, 14.6), E.lam(col), cx, top - 0.2, cz);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { E.mesh(new THREE.BoxGeometry(dx ? 0.3 : 9, 1.1, dx ? 9 : 0.3), E.lam(col), cx + dx * 7.3, top - 0.95, cz + dz * 7.3); E.mesh(lampG, lamp, cx + dx * 7.6, 9.2, cz + dz * 7.6); }
+      E.addBox(cx - MK.half, cx + MK.half, cz - MK.half, cz + MK.half, -5, top, true);
+      if (r() < 0.55 && !tall(cx, cz)) E.item('burger', cx + (r() - 0.5) * 6, cz + (r() - 0.5) * 6, top + 1.5);
+    }
+    // A balcony on the tall stall's north side: the way up to its roof from the roof next door.
+    E.mesh(new THREE.BoxGeometry(14, 0.4, 2.2), E.lam(0x8a6238), 22, 12.2, -13.9); E.addBox(15, 29, -15, -12.8, 11.8, 12.4, true);
+    // The square: a fountain with a lamp on a post, and stall-keepers who have seen it all before.
+    E.mesh(new THREE.CylinderGeometry(2.4, 2.6, 1.8, 10), M.stone, 0, 7.4, 0); E.mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.1, 10), E.lam(0x3f93cf), 0, 8.32, 0); E.addCyl(0, 0, 2.4, 2.4, 5, 8.3, true);
+    E.mesh(new THREE.CylinderGeometry(0.35, 0.45, 4.2, 6), M.stone, 0, 10.4, 0); E.addCyl(0, 0, 0.5, 0.5, 8.3, 12.4, false); E.mesh(new THREE.BoxGeometry(1, 1.1, 1), lamp, 0, 12.9, 0);
+    E.light(0, 13, 0, 0xffc060, 160, 60); for (const [x, z] of [[33, 33], [-33, 33], [33, -33], [-33, -33]]) E.light(x, 11, z, 0xffb050, 70, 46);
+    const folk = [];
+    for (const [x, z, yaw, look] of [[7.8, 22, Math.PI / 2, { coat: ['#8a3a2a', '#6a2a1e', '#a04a36'], apron: 0xe8e0c8 }], [-22, 7.8, 0, { coat: ['#3a5a7a', '#2c4660', '#4a6c8e'], bald: true }],
+      [29.8, -22, -Math.PI / 2, { coat: ['#5a7a3a', '#4a6830', '#6c8c48'], hair: '#8a5a2a' }], [-44, -29.8, Math.PI, { coat: ['#7a5a8a', '#5c4468', '#8e6c9e'], beard: '#3a2a1a' }], [0, -36.2, Math.PI, { coat: ['#a87a3a', '#8a622c', '#c08e4a'], apron: 0x5a3c20 }]]) {
+      const m = Models.buildFolk(look); m.g.position.set(x, 6.5, z); m.yaw = yaw; E.world.g.add(m.g); folk.push([m, yaw]);
+    }
+    E.actor({ step() {}, draw(dt) { for (const [m, yaw] of folk) Models.animFolk(m, { yaw, time: E.time, walk: false, pose: 'idle' }, dt); } });
+    // Crates in the alleys, off the middle of the road, and food down every one of them.
+    const crate = (x, z, s = 2.2, y = 6.5) => { E.mesh(new THREE.BoxGeometry(s, s, s), E.lam(0xffffff, E.rep(M.tex.wood, 1, 1)), x, y + s / 2, z).rotation.y = 0; E.addBox(x - s / 2, x + s / 2, z - s / 2, z + s / 2, y - 1, y + s, true); };
+    for (let i = 0; i < ROUTEK.length; i++) { const [ax, az] = ROUTEK[i], [bx, bz] = ROUTEK[(i + 1) % ROUTEK.length], mx = (ax + bx) / 2, mz = (az + bz) / 2, along = ax === bx;
+      if (i % 2 === 0) crate(mx + (along ? (i % 4 ? 2.6 : -2.6) : 0), mz + (along ? 0 : (i % 4 ? 2.6 : -2.6)));
+      for (const k of [-6, 6]) E.item('taco', mx + (along ? 0 : k), mz + (along ? k : 0)); }
+    for (const q of MK.roads) { E.item('taco', q, 55); E.item('taco', q, -55); E.item('taco', 55, q); E.item('taco', -55, q); }
+    for (const [x, z] of [[55, 55], [-55, 55], [55, -55]]) E.item('burrito', x, z);
+    // The thief.
+    const tgt = [ROUTEK[5][0], ROUTEK[5][1]], speeds = [10, 11.2, 12.3];
+    const T = E.actor({ i: 5, dir: 1, x: tgt[0], z: tgt[1], y: 6.5, yaw: 0, run: false, caught: 0, gone: 0, m: Models.buildFolk({ coat: ['#2a2a34', '#1c1c24', '#3a3a48'], hair: '#1a1a1a', legs: 0x1c1c24, angry: true, scale: 0.92 }) });
+    E.world.g.add(T.m.g); const sack = E.mesh(new THREE.IcosahedronGeometry(0.55, 0), E.lam(0xd8281c), 0, 2.6, -0.5, T.m.g), shadow = E.makeShadow(0.9); LK.thief = T;
+    const far = () => { let best = 0, bd = -1; ROUTEK.forEach(([x, z], k) => { const d = Math.hypot(x - P.x, z - P.z); if (d > bd) { bd = d; best = k; } }); return best; };
+    const pick = () => { const N = ROUTEK.length, a = ROUTEK[(T.i + 1) % N], b = ROUTEK[(T.i + N - 1) % N]; T.dir = Math.hypot(a[0] - P.x, a[1] - P.z) >= Math.hypot(b[0] - P.x, b[1] - P.z) ? 1 : -1; };
+    T.step = dt => {
+      if (T.caught >= 3) return;
+      if (T.gone > 0) { if ((T.gone -= dt) <= 0) { T.i = far(); [T.x, T.z] = ROUTEK[T.i]; T.run = false; T.m.g.visible = shadow.visible = true; E.puff(T.x, 8, T.z, 0x555566, 12, 5, 0.7, 0.6, 2); } return; }
+      const d = Math.hypot(P.x - T.x, P.z - T.z), N = ROUTEK.length;
+      if (!T.run && d < 21) { T.run = true; pick(); E.Sound.whoosh(); } else if (T.run && d > 34) T.run = false;
+      if (T.run) {
+        const [wx, wz] = ROUTEK[(T.i + T.dir + N) % N], dx = wx - T.x, dz = wz - T.z, l = Math.hypot(dx, dz), v = speeds[T.caught] * dt;
+        if (l <= v) { T.x = wx; T.z = wz; T.i = (T.i + T.dir + N) % N; pick(); } else { T.x += dx / l * v; T.z += dz / l * v; T.yaw = Math.atan2(dx, dz); }
+      } else T.yaw = Math.atan2(P.x - T.x, P.z - T.z);
+      tgt[0] = T.x; tgt[1] = T.z;
+      if (P.dead <= 0 && Math.abs(P.y - T.y) < 3 && d < (P.charge > 0 ? 2.9 : 2.0)) {
+        T.caught++; E.puff(T.x, 8, T.z, 0xffe27a, 16, 7, 0.6, 0.6, 3); E.Sound.stomp(); E.Sound.heal(); P.charge = 0; E.objective(`Catch the sauce thief  ${pips(T.caught, 3)}`, tgt);
+        if (T.caught >= 3) { T.run = false; E.say([['gollum', 'The Gollum Man', 'It has him! Sit on him, Hog Man. We wants a word with him about the sauce.'], ['hog', 'Juli the Hog', 'Oink.']], () => E.complete()); }
+        else { T.gone = 1.6; T.m.g.visible = shadow.visible = false; E.puff(T.x, 8, T.z, 0x555566, 14, 6, 0.8, 0.7, 2); E.toast(T.caught === 1 ? 'He slips the hog and is gone. Twice more.' : 'Slippery! Once more. He is faster now: charge him, or head him off.', 4); }
+      }
+    };
+    T.draw = dt => { Models.animFolk(T.m, { yaw: T.yaw, time: E.time, walk: T.run, pose: T.run ? 'idle' : 'shout' }, dt); T.m.g.position.set(T.x, T.y, T.z); sack.rotation.y += dt; shadow.position.set(T.x, T.y + 0.07, T.z); };
+    LK.tgt = tgt;
+    // Hot sauce: a low roof (by the crate), behind the barrels in a corner, the fountain's lamp, the tall roof, and in mid-air between two roofs.
+    crate(-13.8, 22); E.sauce(0, -22, 22, roofOf(-22, 22) + 1.7);
+    for (const [dx, dz] of [[2, 0], [0, 2], [1.5, 1.5], [-0.4, 2.4], [2.4, -0.4]]) { E.mesh(new THREE.CylinderGeometry(0.85, 0.75, 1.9, 9), wood, -56 + dx, 7.45, -56 + dz); E.mesh(new THREE.CylinderGeometry(0.88, 0.88, 0.14, 9), E.lam(0x3a3a3e), -56 + dx, 7.8, -56 + dz); E.addCyl(-56 + dx, -56 + dz, 0.85, 0.85, 5, 8.4, true); } E.sauce(1, -56.3, -56.3, 8.3);
+    E.sauce(2, 0, 0, 14.2); E.sauce(3, 22, -22, roofOf(22, -22) + 1.7); E.sauce(4, -22, -33, 12.9);
+    crate(13.8, 0); E.item('burger', 22, 0, roofOf(22, 0) + 1.5);
+  },
+  begin(E) {
+    E.gollum(true, { mode: 'ride' }); E.cam.pitch = 0.62; E.objective('Catch the sauce thief  ○○○', LK.tgt);
+    E.later(4, () => E.bark('gollum', 'THE GOLLUM MAN: Thief! That one, with the red sack. He has ALL the sauce. After him, piggy-man!', 5.5));
+  },
+};
+
+// The book's four chapters first (saga.js counts on that), then the side roads, in the order of SIDES in hog-progress.js.
+export const LEVELS = [L1, L2, L3, L4, LF, LM, LV, LK];
 // For test bots and the console: the geometry the chapters are built on.
-export const GEO = { T1, T2, T3, T4, GLADE, POND, FORDS, BANK1, GAPS2, LEDGE2, EDGE2, END2, DOOR3, TAV, COR, THR, ESC, K, S4, RIVER4, spiral, AMB: { DAY, DUSK, SNOW, NIGHT, TAVERN, CAVE, BRIGHT, FROST, SUNSET } };
+export const GEO = { T1, T2, T3, T4, GLADE, POND, FORDS, BANK1, GAPS2, LEDGE2, EDGE2, END2, DOOR3, TAV, COR, THR, ESC, K, S4, RIVER4, spiral, TF, RAFT, ROCKSF, BEAMSF, MB, TV, CHIPSV, LOWV, POOLV, CLIMBV, MK, ROUTEK, AMB: { DAY, DUSK, SNOW, NIGHT, TAVERN, CAVE, BRIGHT, FROST, SUNSET } };

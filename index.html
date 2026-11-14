@@ -25,6 +25,7 @@
     #gasfill { display:block; height:100%; width:30%; background:linear-gradient(#b6f23c,#5fae12); }
     #gas.low #gasfill { background:#7d8a6a; }
     #hud-tr { position:absolute; right:16px; top:12px; display:flex; align-items:center; gap:10px; }
+    #sauce { color:#ff8a6a; margin-right:10px; }
     #hud-tr img { height:30px; image-rendering:pixelated; filter:drop-shadow(2px 2px 0 #000); }
     #objective { position:absolute; left:50%; top:14px; transform:translateX(-50%); background:#000a; border:2px solid var(--gold); padding:8px 12px; color:#ffe9a8; white-space:nowrap; max-width:60vw; overflow:hidden; text-overflow:ellipsis; }
     #compass { position:absolute; left:50%; top:54px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; color:#ffe9a8; }
@@ -34,7 +35,7 @@
     body::before, body::after { content:''; position:fixed; left:0; right:0; height:0; background:#000; z-index:2; pointer-events:none; transition:height .5s; }
     body::before { top:0; } body::after { bottom:0; }
     body.cine::before, body.cine::after { height:10vh; }
-    #toast { position:absolute; left:50%; top:22%; transform:translateX(-50%); color:#fff7c2; font-size:clamp(11px,1.8vw,20px); opacity:0; transition:opacity .25s; text-align:center; }
+    #toast { position:absolute; left:50%; top:22%; transform:translateX(-50%); color:#fff7c2; font-size:clamp(11px,1.8vw,20px); opacity:0; transition:opacity .25s; text-align:center; width:max-content; max-width:78vw; line-height:1.5; }
     #toast.on { opacity:1; }
     #prompt { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); background:#000b; border:2px solid #fff; padding:8px 12px; }
     #bark { position:absolute; left:50%; top:90px; transform:translateX(-50%); display:flex; gap:12px; align-items:center; max-width:min(680px,88vw);
@@ -99,7 +100,7 @@
     </div>
     <div id="objective"></div>
     <div id="compass" hidden><i></i><span></span></div>
-    <div id="hud-tr"><img id="foodicon" alt=""><span id="food">0/0</span></div>
+    <div id="hud-tr"><span id="sauce" hidden></span><img id="foodicon" alt=""><span id="food">0/0</span></div>
     <div id="bark" hidden><img alt=""><p></p></div>
     <div id="toast"></div>
     <div id="prompt" hidden></div>
@@ -147,7 +148,7 @@
       <li><b>ARROWS / DRAG</b>Turn the camera · wheel zooms</li>
       <li><b>E</b>Talk &nbsp; <b style="min-width:0">M</b> Mute</li>
     </ul>
-    <h2>ESC to ride on</h2>
+    <h2>ESC to ride on<span id="pause-hub" hidden> · H to go back to the windmill country</span></h2>
   </div>
 
   <div id="book" hidden>
@@ -161,10 +162,10 @@
     <h1>And so ends Part the First</h1>
     <h2>The winds of fate still whisper… for a hog's work is never done.</h2>
     <div class="stats" id="end-stats"></div>
-    <button id="again" class="go">RIDE AGAIN</button>
+    <button id="again" class="go">BACK TO THE WINDMILL COUNTRY</button>
   </div>
 
   <div id="fade"></div>
-  <script type="module" src="saga.js?v=2"></script>
+  <script type="module" src="saga.js?v=4"></script>
 </body>
 </html>

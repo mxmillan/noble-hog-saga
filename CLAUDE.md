@@ -258,9 +258,8 @@ not the pointy-hatted one. The villains are the wizard, the shield-maiden and th
   Ground is mostly a *trail* (`makeTrail`): `s` along it, `d` off to the right; `edge()` makes the
   banks and drops. Heights below −30 are void: not drawn, and a fall into them costs a heart.
 - **Loading a chapter** throws away `world.g` and the entity lists and builds again; the hog, the
-  Gollum Man, the leash and the HUD persist. Progress is the chapter reached (`localStorage`
-  `hogSaga.chapter`, written in `beginLevel`, not `loadLevel` — the title's backdrop load must not
-  overwrite it).
+  Gollum Man, the leash and the HUD persist. Progress is no longer kept here: see the hub section
+  (`hog-progress.js`). An old `hogSaga.chapter` save is read once and converted.
 - **The Gollum Man has three modes** (`E.gollum(on, { mode })`): `follow` (on the leash), `stay` (holds a pose
   somewhere) and `ride` (up behind the rider: his model becomes a child of `hog.pillion`, see
   `mountGollum`). The user asked that he ride from the moment the shield-maiden is beaten, so he rides
@@ -309,7 +308,7 @@ tells. `hog3d-models.js` is shared: it holds the cast and props for both games.
   loops appear, a leash runs from the rider's hand to his head, cut to the road and the pair
   trotting to the city gate. It ends at `./?from=prologue`, where `boot()` in `saga.js` shows page
   3 and begins chapter 1. SKIP THE PROLOGUE on the title runs pages 2 and 3 straight into
-  chapter 1. There is no win screen any more.
+  chapter 1. There is no win screen any more. Finishing chapter 1 lands in the hub (below).
 - **Tutorial hints** are the `TIPS` list above `stepWorld`: each is a toast shown once, when its
   test first passes (near the hay bales, first food, first crow, the river, the mossy stones, the
   sails).
@@ -322,6 +321,74 @@ tells. `hog3d-models.js` is shared: it holds the cast and props for both games.
 - **Driving the scene from a bot:** `HOG.bind()` starts it and `HOG.cine.t` is its clock, but the
   page's own frame loop keeps running in real time and will finish the scene and leave the page.
   Set `window.requestAnimationFrame = () => 0` first, then step with `HOG.tick`.
+
+### The hub — the same page, opened as `hog3d.html?hub`
+
+After the prologue the windmill country is the hub the chapters open off (the user asked for it to
+work like Mario 64's castle). `HUB` (the `?hub` query) switches `hog3d.js` from prologue to hub.
+
+- **Progress is `hog-progress.js`**, imported by both pages: `{ pro, done, open }` in
+  `localStorage['hogSaga.progress']`. `pro` = prologue finished, `done` = chapters finished (which
+  is also the golden foods held), `open` = doors unsealed. Chapters unlock in order, so counts are
+  enough. It also holds `RELICS` (the four golden foods and what each does).
+- **Doors** are the `DOORS` list: city gate (chapter 1, never sealed), an arch by the quarry
+  sealed by a great boulder (2), an arch in the hamlet sealed in ice (3), a hatch on the Great
+  Windmill's deck (4). Riding into an open door goes to `./?level=n`. Finished doors carry their
+  golden food above them.
+- **Each seal needs the food of the chapter before** (`POWER = done`): the churro lengthens the
+  charge and lets it smash the boulder, the popper sets the charge alight so it melts the ice, the
+  chimichanga adds a ground-pound (Q or C in mid-air, pad B) that breaks the hatch. Without the
+  food the Gollum Man barks a hint instead. **The powers exist only in the hub**; the chapters
+  (`saga.js`) do not use them.
+- **A chapter ends** in `saga.js` with `completeLevel(from)`: `awardRelic` flies the golden food
+  from `from` (where the keeper fell) to the hog, then `finishLevel` saves and returns to
+  `hog3d.html?hub&from=n&new`. `from` picks the door to arrive at; `new` plays the fanfare. Chapter
+  3's food is given at the maiden's fall (`E.relic`), and the chapter still ends at the tunnel.
+  Chapter 4 has no award scene (the camera is wherever the flight left it); its end screen says so.
+- **Arriving from a door**, the hog is put `out` units in front of it (19 by default) so the
+  camera behind him is not inside the arch or the gate wall. The hamlet door uses 14: at 19 he
+  landed on top of the well.
+- **In the hub the Gollum Man is a pet on a leash** (`stepPet`): he heels, and when the hog stands
+  idle he creeps round to the side the next door lies on. The bridge troll is gone and his
+  burritos lie where he stood.
+- **Title screen** (`saga.js`): NEW GAME wipes progress (asking twice if there is any) and starts
+  the prologue; CONTINUE goes to the hub; H on a chapter's pause screen goes back to the hub.
+- **Testing:** set `localStorage['hogSaga.progress']` by hand, then open `hog3d.html?hub&from=n`.
+  `HOG.DOORS`, `HOG.prog` are exposed. `SAGA.E.complete()` finishes the current chapter.
+
+### The side roads — four levels that are not in the book
+
+`LF`, `LM`, `LV`, `LK` at the end of `saga-levels.js`: `LEVELS[4..7]`, opened as `./?level=5..8`,
+in the order of `SIDES` in `hog-progress.js` (the hub's `DOORS[4..7]` follow the same order, and
+`from=5..8` brings the hog back to the right door). `saga.js` counts the book's chapters as
+`MAIN`; anything with `side: true` finishes without a golden food and just returns to the hub.
+
+| Level | Door in the hub | Opens at | What it is |
+|---|---|---|---|
+| The Long Water (`ferry`) | by the raft jetty | 1 golden food | A raft ride: step round rocks, jump beams |
+| The Belly of the Mill (`mill`) | foot of the Great Mill | 2 | A vertical climb: brackets, a gear with a sweeping arm, a hoist |
+| Mount Molcajete (`molcajete`) | top of the quarry | 3 | A salsa lake with a tide, tortilla-chip stepping stones, rolling tomatoes |
+| The Night Market (`market`) | the lake islet | 1 | Run a thief down three times in a grid of stalls |
+
+- **Hot sauce:** five bottles a level (`E.sauce(k, x, z, y)`), saved the moment each is picked up
+  as a bitmask in `progress.sauce[id]`. A bottle already found shows as a ghost. The hub's HUD
+  shows the total out of 20. **Nothing spends them yet** (the plan was a secret boss, The Giants).
+- **Engine hooks added for these** (all in `saga.js`): `E.safe(obj)` makes the respawn point an
+  object read at the moment of the fall (the raft, which has moved on); `E.tide(y)` moves the
+  water; level fields `drop` (how far is too far to fall, default 34) and `nosafe(x, z)` (ground
+  never to respawn on); `E.flag(x, z, ox, y)` takes a height.
+- **Anything placed by `groundBelow(x, z, 999)` lands on the highest floor at that spot.** In the
+  mill, where floors stack, the start point, flags, items and triggers all need a clear spot or
+  an explicit height. The first build started the hog on a landing 40 units up.
+- **A raft or chip must overlap the bank it leaves from.** The ground grid blurs a shoreline over
+  a cell or two, so a platform that merely touches the shore sits behind a dip the hog cannot
+  step out of.
+- **Beams are axis-aligned boxes**, so in The Long Water they sit only on the stretches of river
+  that run due north.
+- **Testing these:** a fall waits on a real-time fade (`fadeThen`), so a bot stepping with
+  `SAGA.tick` alone leaves the hog frozen after his first fall. Yield to real time between
+  batches of ticks (`await new Promise(r => setTimeout(r, 12))`). `GEO` exports each level's
+  trail and lists; `LF.raft`, `LM.hoist`, `LV.bowl`, `LK.thief` are left on the level objects.
 
 - **Needs an HTTP server, but no network.** WebGL will not texture from `file://`.
   three.js r170 is vendored at `vendor/three.module.min.js` (MIT, unmodified from the npm

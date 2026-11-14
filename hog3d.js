@@ -1,11 +1,13 @@
 // The Noble Hog Saga 3D — Tilting at Windmills: the prologue to The Hog Man Cometh.
 // How the Hog Man came by his strange pet. It teaches the controls, ends with the Gollum Man tied up and
 // on a leash, and hands over to chapter 1 (index.html?from=prologue). saga.js opens it as hog3d.html?saga.
+// Opened as hog3d.html?hub it is the same country afterwards: the hub the chapters' doors stand in.
 // A one-level 3D platformer. Low-poly world and low-poly cast (see hog3d-models.js); the original
 // 2D sprite art lives on as dialogue portraits and HUD icons.
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in hog3d.html.
 import * as THREE from 'three';
-import * as Models from './hog3d-models.js?v=3';
+import * as Models from './hog3d-models.js?v=6';
+import * as Progress from './hog-progress.js?v=2';
 
 // ───────────────────────────── utils ─────────────────────────────
 const $ = id => document.getElementById(id);
@@ -19,7 +21,8 @@ function mulberry(seed) {
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 const rnd = mulberry(1605); // world layout is seeded so it is the same every run
-const DEV = new URLSearchParams(location.search).has('dev');
+const QS = new URLSearchParams(location.search), DEV = QS.has('dev'), HUB = QS.has('hub'), prog = Progress.load();
+const POWER = HUB ? prog.done : 0;                  // golden foods at work: 1 the churro, 2 the popper, 3 the chimichanga
 
 // ───────────────────────────── world shape ─────────────────────────────
 // Terrain grid. The island has a western lobe, so the grid is wider than it is deep.
@@ -217,7 +220,7 @@ function readInput() {
     const dz = v => (Math.abs(v) < 0.18 ? 0 : v), b = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
     x += dz(gp.axes[0] || 0); y -= dz(gp.axes[1] || 0); cx -= dz(gp.axes[2] || 0); cy -= dz(gp.axes[3] || 0);
     jump = jump || b(0);
-    const map = { 0: 'Space', 1: 'KeyF', 2: 'KeyF', 3: 'KeyE', 9: 'Escape' };
+    const map = { 0: 'Space', 1: 'KeyQ', 2: 'KeyF', 3: 'KeyE', 9: 'Escape' };
     for (const i in map) { if (b(i) && !padPrev[i]) HIT[map[i]] = true; padPrev[i] = b(i); }
   }
   const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
@@ -431,7 +434,7 @@ function buildProps() {
     mesh(new THREE.BoxGeometry(60, 22, 4), wallM, sx * 44, 6, 196); for (let i = 0; i < 13; i++) mesh(merlon, merM, sx * (16.5 + i * 4.4), 17.8, 196); addCyl(sx * 10, 195.4, 4.7, 4.7, -10, 40, false);
     mesh(new THREE.CylinderGeometry(4.6, 5, 30, 10), lam(0xffffff, rep(M.tex.wall, 4, 3)), sx * 76, 8, 197); mesh(new THREE.ConeGeometry(5.6, 7, 10), lam(0xd06a50, rep(M.tex.tiles, 8, 3)), sx * 76, 26.5, 197);
   }
-  addBox(-230, 230, 191.5, 200, -10, 40, false);
+  addBox(-230, -2.7, 191.5, 200, -10, 40, false); addBox(2.7, 230, 191.5, 200, -10, 40, false); addBox(-2.7, 2.7, 193.5, 200, -10, 40, false);   // the archway is open a little way in
   // Bridge.
   const bw = 6.4, bz0 = 44, bz1 = 80, by = 6.75;
   const bm = mesh(new THREE.BoxGeometry(bw, 0.6, bz1 - bz0), lam(0xffffff, rep(M.tex.wood, 2, 10)), 0, by - 0.3, 62); bm.material.map.rotation = 0;
@@ -691,7 +694,7 @@ function fadeThen(fn) { P.frozen = true; $('fade').style.opacity = 1; setTimeout
 // ───────────────────────────── player ─────────────────────────────
 function hurt(n, kx = 0, kz = 0) {
   if (P.inv > 0 || P.dead > 0 || P.frozen || state !== 'play') return false;
-  P.hp -= n; P.inv = 1.6; P.stun = 0.35; P.charge = 0;
+  P.hp -= n; P.inv = 1.6; P.stun = 0.35; P.charge = 0; P.pound = false;
   const k = Math.hypot(kx, kz); if (k > 0.001) { P.vx = kx / k * 11; P.vz = kz / k * 11; }
   P.vy = 9; P.grounded = false; P.ground = null; P.coyote = 0; cam.shake = 0.35; Sound.hit(); updateHUD();
   puff(P.x, P.y + 1.5, P.z, 0xffffff, 6, 5, 0.5, 0.35);
@@ -726,7 +729,7 @@ function stepPlayer(dt) {
   if (P.wantCharge) {
     P.wantCharge = false;
     if (P.charge <= 0 && P.stun <= 0) {
-      if (P.fuel >= 0.2) { P.fuel -= 0.22; P.charge = 0.5; if (wm > 0.2) { P.dirX = wx / wm; P.dirZ = wz / wm; } P.vy = Math.max(P.vy, 2.5); Sound.charge(); cam.shake = 0.15; }
+      if (P.fuel >= 0.2) { P.fuel -= 0.22; P.charge = POWER >= 1 ? 0.62 : 0.5; if (wm > 0.2) { P.dirX = wx / wm; P.dirZ = wz / wm; } P.vy = Math.max(P.vy, 2.5); Sound.charge(); cam.shake = 0.15; }
       else toast('Out of gas — eat something!', 1.4);
     }
   }
@@ -734,12 +737,15 @@ function stepPlayer(dt) {
     P.charge -= dt;
     if (wm > 0.2) { const a = Math.atan2(P.dirZ, P.dirX), b = Math.atan2(wz, wx), na = a + clamp(wrap(b - a), -2.4 * dt, 2.4 * dt); P.dirX = Math.cos(na); P.dirZ = Math.sin(na); }
     P.vx = P.dirX * CHARGE_SPEED; P.vz = P.dirZ * CHARGE_SPEED; if (P.vy < 0) P.vy *= 0.8;
-    if (Math.random() < dt * 40) puff(P.x - P.dirX * 1.6, P.y + 1 + Math.random(), P.z - P.dirZ * 1.6, 0x8fdc2a, 1, 2, 0.8, 0.45, 1);
+    if (Math.random() < dt * 40) puff(P.x - P.dirX * 1.6, P.y + 1 + Math.random(), P.z - P.dirZ * 1.6, POWER >= 2 ? (Math.random() < 0.5 ? 0xff7a1a : 0xffd23a) : 0x8fdc2a, 1, 2, 0.8, 0.45, 1);   // the popper sets it alight
   } else {
     const acc = (P.grounded ? (wm > 0.05 ? 62 : 50) : 26) * dt, tx = wx * RUN, tz = wz * RUN, dx = tx - P.vx, dz = tz - P.vz, d = Math.hypot(dx, dz);
     if (d <= acc) { P.vx = tx; P.vz = tz; } else { P.vx += dx / d * acc; P.vz += dz / d * acc; }
     if (wm > 0.2) { P.dirX = wx / wm; P.dirZ = wz / wm; }
   }
+  // The chimichanga's ground-pound: straight down, as fast as a hog falls.
+  if (P.wantPound) { P.wantPound = false; if (POWER >= 3 && !P.grounded && !P.pound && P.stun <= 0) { P.pound = true; P.charge = 0; P.vy = -46; Sound.whoosh(); } }
+  if (P.pound) { P.vx = P.vz = 0; P.vy = Math.min(P.vy, -30); }
   // Steep ground: you slide, and you cannot run up it.
   P.sliding = false;
   if (P.grounded && !P.ground) {
@@ -749,7 +755,7 @@ function stepPlayer(dt) {
   // Jumping. A second press in mid-air spends gas on a boost.
   if (P.jumpBuf > 0) {
     if ((P.grounded || P.coyote > 0) && !P.sliding) { P.vy = JUMP; P.grounded = false; P.ground = null; P.coyote = 0; P.jumpBuf = 0; P.squash = -1; Sound.jump(); }
-    else if (!P.grounded && P.coyote <= 0 && P.canBoost && P.fuel >= 0.2) { P.vy = 17.5; P.fuel -= 0.2; P.canBoost = false; P.boostT = 0.4; P.jumpBuf = 0; Sound.boost(); puff(P.x, P.y, P.z, 0x8fdc2a, 8, 3, 0.9, 0.5, -2); }
+    else if (!P.grounded && P.coyote <= 0 && P.canBoost && P.fuel >= 0.2 && !P.pound) { P.vy = 17.5; P.fuel -= 0.2; P.canBoost = false; P.boostT = 0.4; P.jumpBuf = 0; Sound.boost(); puff(P.x, P.y, P.z, 0x8fdc2a, 8, 3, 0.9, 0.5, -2); }
   }
   if (!input.jumpHeld && P.vy > 5 && P.boostT <= 0) P.vy -= 60 * dt;
 
@@ -785,6 +791,7 @@ function stepPlayer(dt) {
   const g = groundBelow(nx, nz, P.y + STEP, gOut), was = P.grounded;
   if (ny <= g || (was && P.vy <= 0 && ny - g < 0.5)) {
     if (!was && P.vy < -6) { P.squash = 1; Sound.land(); puff(nx, g + 0.2, nz, 0xe6dcc0, 5, 3, 0.5, 0.35, 0.6); }
+    if (P.pound) { P.pound = false; P.slam = true; P.squash = 1; cam.shake = 0.5; Sound.thud(); for (let k = 0; k < 14; k++) { const a = k / 14 * TAU; puff(nx + Math.cos(a) * 1.6, g + 0.3, nz + Math.sin(a) * 1.6, 0xe6dcc0, 1, 7, 0.8, 0.5, 0.4); } }
     ny = g; P.vy = 0; P.grounded = true; P.ground = gOut.ref; P.coyote = 0.1; P.canBoost = true;
   } else { P.grounded = false; P.ground = null; P.coyote -= dt; }
   P.x = nx; P.y = ny; P.z = nz;
@@ -921,6 +928,7 @@ function gollumHit(stomp, dx, dz, d) {
   bark('gol_hurt', ['GOLLUM MAN: Ach! It squashes us!', 'GOLLUM MAN: Nasty, stinking hog!', 'GOLLUM MAN: Nooo! It burns us! Take it — take the horrid ring!'][G.hits - 1], 3);
 }
 function stepGollum(dt) {
+  if (HUB) return stepPet(dt);
   const G = GOL, cx = MILL.x, cz = MILL.z; G.inv = Math.max(0, G.inv - dt);
   const dx = P.x - G.x, dz = P.z - G.z, d = Math.hypot(dx, dz) || 0.001, dy = P.y - G.y;
   const face = (vx, vz) => { const l = Math.hypot(vx, vz); if (l > 0.02) { G.hx = vx / l; G.hz = vz / l; } };   // which way he is looking
@@ -1065,13 +1073,159 @@ function bindScene() {
     }
     leash.visible = t >= 4.0;
     if (leash.visible) { hog.arms[0].getWorldPosition(_a); G.m.head.getWorldPosition(_b); _a.y -= 0.6; leash.position.copy(_a).lerp(_b, 0.5); leash.scale.z = _a.distanceTo(_b); leash.lookAt(_b); }
-  }, done() { fade.style.opacity = 1; location.href = './?from=prologue'; } });
+  }, done() { fade.style.opacity = 1; Progress.save({ ...Progress.load(), pro: true }); location.href = './?from=prologue'; } });
+}
+
+// ───────────────────────────── the hub: doors to the chapters ─────────────────────────────
+// With ?hub this is no longer the prologue but the country the chapters open off. Each door leads to one
+// (./?level=n). The first is open; each of the others is sealed by something only the golden food of the
+// chapter before can deal with. Progress is in hog-progress.js.
+const DOORS = [
+  { title: 'The Darkling Trail', x: 0, z: 192.3, yaw: Math.PI, colour: 0xffd27a, gate: true },
+  { title: 'The Cold Mountain', x: -282, z: -44, yaw: -0.5, colour: 0xa8dcff, bar: 'boulder', todo: 'Smash the great boulder by the quarry',
+    hint: 'A great stone, on a door. No piggy charge will shift that. Not yet.', how: 'The churro is in it now! Charge the great stone, piggy-man. SHIFT!' },
+  { title: 'The Oasis', x: HAMLET.x + 19, z: HAMLET.z + 1, yaw: -Math.PI / 2, colour: 0xffa858, bar: 'ice', out: 14,      // any further out and he lands on the well
+    todo: 'Melt the ice on the tavern door in the hamlet',
+    hint: 'Ice. Thick as a troll. It wants fire, and we has none. Not yet.', how: 'It burns now, the piggy burns! Charge the ice, Hog Man. SHIFT!' },
+  { title: 'The White Castle', x: MILL.x + Math.cos(3.3) * 7, z: MILL.z + Math.sin(3.3) * 7, y: MILL.deckY, yaw: 3.3 + Math.PI, colour: 0xe8e4ff, bar: 'hatch', flat: true, todo: 'Ground-pound the hatch atop the Great Windmill',
+    hint: 'A hatch. Nailed and banded. It would take something heavy, from a height.', how: 'Jump, piggy-man, and Q in the air! Land on it like a dropped anvil.' },
+  // The side roads (saga-levels.js: LF, LM, LV, LK), in the order of Progress.SIDES. No seal: each opens once enough golden foods are held.
+  { side: 'ferry', title: 'The Long Water', x: FERRY_X + 10, z: FERRY_RZ + 22, yaw: -Math.PI / 2, colour: 0x7ac8f0 },
+  { side: 'mill', title: 'The Belly of the Mill', x: 11, z: -84, yaw: -0.94, colour: 0xd8a86a, out: 16 },
+  // On a hilltop and an islet there is no room to arrive in front of the door: spawn is [x, z, dirX, dirZ].
+  { side: 'molcajete', title: 'Mount Molcajete', x: QUARRY.x, z: QUARRY.z + 6.5, y: QUARRY.top, yaw: Math.PI, colour: 0xff6a3a, spawn: [QUARRY.x - 3.5, QUARRY.z - 1.5, 1, 0] },
+  { side: 'market', title: 'The Night Market', x: LAKE.x + 7.6, z: LAKE.z - 1.2, y: LAKE.y, yaw: -Math.PI / 2, colour: 0xb890ff, spawn: [LAKE.x + 1, LAKE.z + 6.5, 0, 1] },
+];
+let leaving = false;
+const hubNext = () => DOORS.find(d => !d.side && !d.done) || null;          // the first chapter of the book not yet finished
+function hubObjective() {
+  const d = hubNext();
+  setObjective(!d ? 'The Food of the Lamp is yours. Ride where you will.' : d.open ? `Enter the door to ${d.title}` : d.todo);
+  $('relics').hidden = false; $('relics').textContent = `GOLDEN FOODS ${prog.done}/4 · HOT SAUCE ${Progress.sauceAll(prog)}/${Progress.SIDES.length * Progress.BOTTLES}`;
+}
+function buildDoors() {
+  DOORS.forEach((d, i) => {
+    const S = d.side && Progress.SIDES.find(q => q.id === d.side);
+    d.i = i; d.y = d.y ?? terrainH(d.x, d.z); d.fx = Math.sin(d.yaw); d.fz = Math.cos(d.yaw);
+    if (S) { d.need = S.need; d.done = prog.sides.includes(d.side); d.open = prog.done >= S.need; } else { d.done = i < prog.done; d.open = d.done || i < prog.open; }
+    const sx = Math.cos(d.yaw), sz = -Math.sin(d.yaw), w = d.gate ? 5.3 : 4.2, h = d.gate ? 6.3 : 5.4;      // (sx, sz): along the threshold
+    const p = Models.buildPortal({ flat: d.flat, arch: !d.gate, w, h, colour: d.colour }); p.g.position.set(d.x, d.y - (d.flat ? 0 : 0.15), d.z); p.g.rotation.y = d.yaw; scene.add(p.g);
+    d.film = p.film; d.film.visible = d.open;
+    if (!d.flat) {
+      if (!d.gate) for (const k of [1, -1]) addCyl(d.x + sx * k * (w / 2 + 0.55), d.z + sz * k * (w / 2 + 0.55), 0.75, 0.75, d.y - 3, d.y + h + 1.2, false);
+      const board = text => ({ text, dx: -sx - d.fx * 0.5, dz: -sz - d.fz * 0.5 });
+      signpost(d.x + sx * (w / 2 + 2.2) + d.fx * 2.6, d.z + sz * (w / 2 + 2.2) + d.fz * 2.6, d.side && !d.open ? [board(d.title.toUpperCase()), board(`NEEDS ${d.need} GOLDEN FOOD${d.need > 1 ? 'S' : ''}`)] : [board(d.title.toUpperCase())]);
+    }
+    if (d.done) { d.trophy = d.side ? Models.buildSauce() : Models.buildRelic(Progress.RELICS[i].id); d.trophy.position.set(d.x, d.y + (d.flat ? 3.4 : h + 3), d.z); scene.add(d.trophy); }
+    if (d.open || !d.bar) return;
+    const g = d.seal = new THREE.Group(); scene.add(g);
+    if (d.bar === 'boulder') {
+      d.bx = d.x + d.fx * 1.3; d.bz = d.z + d.fz * 1.3; d.br = 2.6; g.position.set(d.bx, d.y, d.bz);
+      const b = mesh(new THREE.IcosahedronGeometry(2.9, 1), M.rock, 0, 2.1, 0, g); b.scale.set(1, 0.92, 1); b.rotation.set(0.4, 1.1, 0.2);
+      for (const [x, z, r] of [[2.5, 1.2, 0.9], [-2.3, 1.6, 0.7], [0.6, 2.7, 0.6]]) mesh(new THREE.IcosahedronGeometry(r, 0), M.rock, x, r * 0.6, z, g).rotation.set(x, z, r);
+    } else if (d.bar === 'ice') {
+      d.bx = d.x; d.bz = d.z; d.br = 3.4; g.position.set(d.x, d.y, d.z); g.rotation.y = d.yaw;
+      const ice = new THREE.MeshLambertMaterial({ color: 0xbfe8ff, emissive: 0x16303c, transparent: true, opacity: 0.66, flatShading: true });
+      mesh(new THREE.BoxGeometry(7.4, 7.2, 3.2), ice, 0, 3.3, 0, g);
+      for (const [x, y, z, s] of [[-2.6, 7.2, 0.4, 1.2], [1.4, 7.4, -0.5, 1.6], [3.1, 6.9, 0.6, 0.9], [-0.6, 7.0, 0.9, 0.8]]) mesh(new THREE.ConeGeometry(0.7 * s, 1.8 * s, 5), ice, x, y, z, g);
+    } else {
+      d.bx = d.x; d.bz = d.z; d.br = 2.3; g.position.set(d.x, d.y, d.z); g.rotation.y = d.yaw;
+      mesh(new THREE.BoxGeometry(3.5, 0.18, 3.5), lam(0xffffff, rep(M.tex.wood, 1.5, 1.5)), 0, 0.1, 0, g);
+      for (const z of [-1.1, 1.1]) mesh(new THREE.BoxGeometry(3.7, 0.1, 0.36), lam(0x3a3632), 0, 0.2, z, g);
+      mesh(new THREE.TorusGeometry(0.3, 0.07, 4, 8).rotateX(Math.PI / 2), lam(0x3a3632), 0, 0.24, 0, g);
+    }
+    if (!d.flat) d.solid = addCyl(d.bx, d.bz, d.br, d.br, d.y - 3, d.y + 5.5, false);
+  });
+}
+function unseal(d) {
+  d.open = true; prog.open = Math.max(prog.open, d.i + 1); Progress.save(prog);
+  d.seal.visible = false; if (d.solid) { d.solid.y0 = d.solid.y1 = -999; } d.film.visible = true;
+  const [colour, n] = d.bar === 'boulder' ? [0x8f8a80, 34] : d.bar === 'ice' ? [0xdff4ff, 40] : [0x8a6238, 22];
+  puff(d.bx, d.y + 2, d.bz, colour, n, 11, 1.0, 0.9, 5, 14); puff(d.bx, d.y + 1, d.bz, 0xffffff, 12, 5, 0.7, 0.7, 3);
+  $('bark').hidden = true; d.wait = time + 1.3;                                   // a moment to see it open before he can blunder through
+  Sound.thud(); Sound.check(); cam.shake = 0.6; P.charge = 0; P.vx = P.vz = 0; toast(`The way to ${d.title} is open`, 3.5); hubObjective();
+}
+function enterDoor(d) {
+  leaving = true; P.frozen = true; Sound.whoosh(); $('fade').style.opacity = 1;
+  setTimeout(() => { location.href = `./?level=${d.i + 1}`; }, 450);
+}
+function stepHub() {
+  const slam = P.slam; P.slam = false;
+  if (slam) for (const c of crows) if (c.alive && Math.hypot(c.x - P.x, c.z - P.z) < 6.5 && Math.abs(c.y - P.y) < 5) { c.alive = false; c.back = 25; c.s.visible = false; c.shadow.visible = false; Sound.stomp(); puff(c.x, c.y + 1, c.z, 0x222222, 10, 6, 0.4, 0.6, 3, 12); }
+  if (leaving || P.dead > 0) return;
+  for (const d of DOORS) {
+    const near = Math.hypot(P.x - d.x, P.z - d.z), level = Math.abs(P.y - d.y) < (d.flat ? 1.5 : 4);
+    if (d.open) { if (time > (d.wait || 0) && near < (d.flat ? 1.5 : 1.9) && level && (!d.flat || P.grounded)) return enterDoor(d); continue; }
+    if (d.side) {                                          // a side road, not yet earned
+      if (near < 6.5 && level && time > (d.nag || 0)) { d.nag = time + 16; bark('gol_idle', `THE GOLLUM MAN: Shut. It wants ${d.need} golden food${d.need > 1 ? 's' : ''} and we has ${prog.done}. Greedy door.`, 5); Sound.gollum(); }
+      continue;
+    }
+    const at = Math.hypot(P.x - d.bx, P.z - d.bz), hit = level && (d.flat ? slam && at < 2.7 : P.charge > 0 && at < d.br + PR + 0.7), close = level && at < d.br + (d.flat ? 0.4 : 4);
+    if (hit && POWER >= d.i) unseal(d);
+    else if ((hit || close) && time > (d.nag || 0)) {
+      d.nag = time + (hit ? 5 : 16); bark('gol_idle', 'THE GOLLUM MAN: ' + (POWER >= d.i ? d.how : d.hint), 5.5); Sound.gollum();
+      if (hit) { Sound.thud(); cam.shake = 0.3; }
+    }
+  }
+}
+// On his leash: he keeps to heel, is hauled along when the hog outruns him, and when the hog stands idle he
+// creeps round to the side the next door lies on.
+function stepPet(dt) {
+  const G = GOL; G.inv = 0; G.state = 'pet';
+  const still = Math.hypot(P.vx, P.vz) < 1; G.idle = still ? (G.idle || 0) + dt : 0;
+  let hx = P.x - P.dirX * 3.3, hz = P.z - P.dirZ * 3.3;
+  const t = objectiveTarget();
+  if (t && G.idle > 1.4) { const tx = t[0] - P.x, tz = t[1] - P.z, tl = Math.hypot(tx, tz); if (tl > 6) { hx = P.x + tx / tl * 3.4; hz = P.z + tz / tl * 3.4; } }
+  const far = Math.hypot(P.x - G.x, P.z - G.z), dx = hx - G.x, dz = hz - G.z, d = Math.hypot(dx, dz);
+  let moving = false;
+  if (far > 30 || Math.abs(P.y - G.y) > 12) { G.x = hx; G.z = hz; G.y = P.y; }
+  else if (d > 0.5 && (far > 4.4 || G.idle > 1.4)) { const sp = Math.min(far > 7 ? 30 : 13, d / dt); G.x += dx / d * sp * dt; G.z += dz / d * sp * dt; G.hx = dx / d; G.hz = dz / d; moving = true; }
+  else if (t && still) { const tx = t[0] - G.x, tz = t[1] - G.z, tl = Math.hypot(tx, tz) || 1; G.hx = tx / tl; G.hz = tz / tl; }
+  const gy = groundBelow(G.x, G.z, Math.max(G.y, P.y) + 2.5), want = gy < 1.5 ? P.y : gy;      // over water he dangles at the hog's height
+  const air = Math.abs(want - G.y) > 0.5; G.y += clamp(want - G.y, -32 * dt, 24 * dt);
+  G.frame = air ? 'gol_jump' : moving ? 'gol_crawl' : 'gol_idle';
+}
+const _la = new THREE.Vector3(), _lb = new THREE.Vector3();
+function drawLeash() { hog.arms[0].getWorldPosition(_la); GOL.m.head.getWorldPosition(_lb); _la.y -= 0.6; leash.position.copy(_la).lerp(_lb, 0.5); leash.scale.z = Math.max(0.01, _la.distanceTo(_lb)); leash.lookAt(_lb); }
+function startHub() {
+  Sound.init(); $('title').hidden = true; $('hud').hidden = false; state = 'play'; prog.pro = true; Progress.save(prog); document.title = 'The Noble Hog Saga — The Windmill Country';
+  TROLL.state = 'dead'; TROLL.loot.forEach((it, k) => { it.drop = 0; it.x += (k - 1) * 2; it.s.position.x = it.x; });       // the bridge is clear; what he had is lying there
+  const from = clamp(parseInt(QS.get('from') || '0', 10) || 0, 0, DOORS.length), d = DOORS[from - 1];
+  if (d && d.spawn) { [P.x, P.z, P.dirX, P.dirZ] = d.spawn; P.y = groundBelow(P.x, P.z, d.y + 3); }
+  else if (d) { const o = d.out ?? (d.flat ? 4 : 19); P.x = d.x + d.fx * o; P.z = d.z + d.fz * o; P.y = groundBelow(P.x, P.z, d.y + 3); P.dirX = d.fx; P.dirZ = d.fz; }
+  checkpoint = { x: P.x, y: P.y, z: P.z }; lastSafe = { ...checkpoint }; hog.yaw = Math.atan2(P.dirX, P.dirZ);
+  cam.yaw = Math.atan2(-P.dirX, -P.dirZ); cam.pitch = 0.34; cam.dist = cam.cur = 15; cam.tgt.set(P.x, P.y + 2.4, P.z);
+  GOL.state = 'pet'; GOL.x = P.x - P.dirX * 3; GOL.z = P.z - P.dirZ * 3; GOL.y = P.y; GOL.hx = P.dirX; GOL.hz = P.dirZ; leash.visible = true; ringModel.visible = false;
+  const tell = (id, lines) => { const n = npcs.find(q => q.id === id); n.lines = lines; n.i = 0; };
+  tell('wizard', [[() => { const q = hubNext(); return !q ? 'The Lamp, fed! I shall dine out on having known you. Ride where you will, hog-rider.' : q.open ? `The door to ${q.title} stands open. The finger-posts and the arrow up top will see you there.` : `${q.todo}. That is my counsel, and it is free.`; }],
+    ['Every keeper you best gives up a golden food. Each one teaches the hog a new trick, and each trick opens another door.'],
+    ['A door you have been through stays open. Go back whenever the fancy takes you.'],
+    ['There are other doors about, not in any book: by the raft, at the foot of the Great Mill, on the lake islet, atop the quarry. They open to a rider with golden foods enough, and there is hot sauce hidden behind every one.']]);
+  tell('oldman', [['There is a hatch on my deck I have never once got open. Forty years I have stamped on it.'], ['Mind the sails on the south side, lad. Time your jump. They have flattened better knights than you.'], ['Some fool with a lance called her a giant once. She has never forgiven it.']]);
+  tell('other', [['That door by the cart froze solid the night it appeared. The Oasis, the board says. In this weather.'], ['Crossing the lake? Mind the mossy stones, friend. They sink.'], ['Folk say I look like the miller up the hill. I do not see it myself.']]);
+  hubObjective(); updateHUD(); history.replaceState(null, '', 'hog3d.html?hub');          // a reload should not replay the fanfare
+  if (QS.has('new') && d) {
+    const R = Progress.RELICS[from - 1], next = hubNext();
+    prize = { m: Models.buildRelic(R.id), t: 10, say: 'THE GOLLUM MAN: ' + (next ? next.how : 'The Lamp is fed and so is it. We could goes home now. We has no home. We stays with the piggy-man.') };
+    scene.add(prize.m); Sound.win(); toast(`${R.name}! ${R.power}`, 4.6); if (next) next.nag = time + 20;
+  } else if (d && d.side) toast(`${d.title}: hot sauce ${Progress.sauceIn(prog, d.side)} of ${Progress.BOTTLES}`, 4);
+  else toast('THE WINDMILL COUNTRY', 3);
+}
+let prize = null;
+function drawHub(dt) {
+  for (const d of DOORS) {
+    if (d.film.visible) { d.film.material.map.offset.y = time * 0.22; d.film.material.opacity = 0.72 + Math.sin(time * 2.2 + d.i) * 0.14; }
+    if (d.trophy) { d.trophy.rotation.y = time * 1.6 + d.i; d.trophy.position.y = d.y + (d.flat ? 3.4 : (d.gate ? 6.3 : 5.4) + (d.side ? 2.2 : 3)) + Math.sin(time * 2 + d.i) * 0.25; }
+  }
+  if (prize) { prize.t -= dt; if (prize.say && prize.t < 5) { bark('gol_idle', prize.say, 6); Sound.gollum(); prize.say = null; } prize.m.position.set(P.x, P.y + 5.3 + Math.sin(time * 3) * 0.12, P.z); prize.m.rotation.y = time * 2.6; prize.m.scale.setScalar(1.45 * Math.min(1, prize.t)); if (prize.t <= 0) { scene.remove(prize.m); prize = null; } }
+  if (state !== 'cine') drawLeash();
 }
 
 // ───────────────────────────── the compass ─────────────────────────────
 // Where the current objective is, or null when the hog is already upon it.
 function objectiveTarget() {
   const G = GOL;
+  if (HUB) { const d = hubNext(); return !d ? null : d.flat && Math.hypot(P.x - MILL.x, P.z - MILL.z) > 26 ? [MILL.steps[0].x, MILL.steps[0].z] : [d.x, d.z]; }
   if (hasRing) return null;
   if (ring.free) return [ring.x, ring.z];
   if (G.state === 'perch' || G.state === 'taunt') return [G.x, G.z];
@@ -1108,13 +1262,13 @@ function stepTips(dt) {
   const tip = TIPS.find(q => !q.done && q.when()); if (tip) { tip.done = true; tipT = 7; toast(tip.text, 5.5); }
 }
 function stepWorld(dt) {
-  stepTips(dt);
+  if (HUB) stepHub(); else stepTips(dt);
   for (const f of flags) if (!f.on && Math.hypot(P.x - f.x, P.z - f.z) < 7 && P.grounded) {
     flags.forEach(o => { o.on = false; o.f.material = M.flag; }); f.on = true; f.f.material = M.flagOn; checkpoint = { x: f.x - 4, y: f.y, z: f.z }; Sound.check(); toast('Checkpoint'); }
   nearNpc = null;
   for (const n of npcs) if (Math.hypot(P.x - n.x, P.z - n.z) < 5.5 && Math.abs(P.y - n.y) < 3) nearNpc = n;
   $('prompt').hidden = !nearNpc; if (nearNpc) $('prompt').textContent = `E  Talk to ${nearNpc.name}`;
-  if (nearNpc && HIT.KeyE && P.grounded) { const n = nearNpc, l = n.lines[n.i % n.lines.length]; n.i++; say(l.map(t => [n.spr, n.name, t])); }
+  if (nearNpc && HIT.KeyE && P.grounded) { const n = nearNpc, l = n.lines[n.i % n.lines.length]; n.i++; say(l.map(t => [n.spr, n.name, typeof t === 'function' ? t() : t])); }
 }
 
 // ───────────────────────────── camera ─────────────────────────────
@@ -1164,7 +1318,7 @@ function updateVisuals(dt) {
   const T = TROLL, tdx = P.x - T.x, tdz = P.z - T.z, td = Math.hypot(tdx, tdz), ty = T.y ?? terrainH(T.x, T.z);
   if (td < 30) T.yaw = Math.atan2(tdx, tdz);
   Models.animTroll(T.m, { state: T.state, walking: td < 17 && td > 3.6 && P.dead <= 0, time, yaw: T.yaw ?? Math.PI }, dt);
-  T.m.g.position.set(T.x, ty, T.z); T.m.g.visible = !(T.inv > 0 && T.state !== 'dead' && Math.floor(time * 16) % 2); T.shadow.position.set(T.x, ty + 0.07, T.z);
+  T.m.g.position.set(T.x, ty, T.z); T.m.g.visible = !HUB && !(T.inv > 0 && T.state !== 'dead' && Math.floor(time * 16) % 2); T.shadow.position.set(T.x, ty + 0.07, T.z); T.shadow.visible = !HUB;
   // Gollum Man.
   const G = GOL;
   Models.animGollum(G.m, { frame: G.frame, dirX: G.hx, dirZ: G.hz, time, shake: G.state === 'windup' }, dt);
@@ -1179,6 +1333,7 @@ function updateVisuals(dt) {
   ringModel.scale.setScalar(rh); ringModel.rotation.y = time * 3.2; ringModel.position.set(rxp, ryp, rzp);
   if ((ring.free || hasRing) && Math.random() < dt * 12) puff(rxp + (Math.random() - 0.5), ryp + (Math.random() - 0.5), rzp, 0xffe27a, 1, 0.5, 0.18, 0.5, 1.2);
   for (const f of flags) f.f.rotation.y = Math.sin(time * 3 + f.x) * 0.5;
+  if (HUB) { ringModel.visible = false; drawHub(dt); }
 
   sky.position.x = camera.position.x; sky.position.z = camera.position.z; sea.position.set(camera.position.x, Math.sin(time * 0.8) * 0.06, camera.position.z);
   $('gasfill').style.width = `${P.fuel * 100}%`; $('gas').classList.toggle('low', P.fuel < 0.2);
@@ -1201,10 +1356,11 @@ function frame(dt) {
   readInput();
   if (HIT.KeyM) toast(Sound.toggle() ? 'Sound off' : 'Sound on', 1);
   if (state === 'play') {
-    if (HIT.Escape || HIT.KeyP) { state = 'pause'; $('pause').hidden = false; }
+    if (HIT.Escape || HIT.KeyP) { state = 'pause'; $('pause').hidden = false; $('powers').textContent = Progress.RELICS.slice(0, Math.min(POWER, 3)).map(r => `${r.name}: ${r.power}`).join('  ·  '); }
     else {
       if (HIT.Space) P.jumpBuf = 0.13;
       if (HIT.ShiftLeft || HIT.ShiftRight || HIT.KeyF) P.wantCharge = true;
+      if (HIT.KeyQ || HIT.KeyC) P.wantPound = true;
       if (DEV) { const w = { Digit1: [0, 150], Digit2: [0, 36], Digit3: [0, -79], Digit4: [MILL.x + 7, MILL.z + 5, MILL.deckY], Digit5: [HAMLET.x, HAMLET.z - 12], Digit6: [LAKE.x, LAKE.z + 58], Digit7: [LAKE.x - 6, LAKE.z + 4], Digit8: [-300, -32], Digit9: [QUARRY.x + 4, QUARRY.z + 4] }; for (const k in w) if (HIT[k]) HOG.warp(...w[k]); }
       for (let rem = dt; rem > 1e-5 && state === 'play';) { const h = Math.min(rem, 1 / 90); simulate(h); rem -= h; }
       if (state === 'play') stepWorld(dt);
@@ -1260,7 +1416,7 @@ async function boot() {
   ]);
   try { await Promise.race([document.fonts.load('16px "Press Start 2P"'), new Promise(r => setTimeout(r, 1500))]); } catch { /* the finger-posts fall back to monospace */ }
   makeMaterials(); buildTerrain(); buildSky(); initParticles();
-  buildProps(); buildItems(); buildCreatures(); buildFlora();
+  buildProps(); buildItems(); buildCreatures(); buildFlora(); if (HUB) buildDoors();
   P.y = terrainH(P.x, P.z); checkpoint = { x: P.x, y: P.y, z: P.z }; lastSafe = { ...checkpoint }; TROLL.y = terrainH(TROLL.x, TROLL.z);
   playerShadow = makeShadow(1.4); hog = Models.buildHogman(); scene.add(hog.g);
   leash = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1), lam(0xb9925a)); leash.visible = false; scene.add(leash);
@@ -1268,7 +1424,7 @@ async function boot() {
   $('foodicon').src = pic('taco'); $('ringicon').src = pic('ring');
   state = 'title'; $('start').disabled = false; $('start').textContent = 'PRESS ENTER'; $('start').onclick = startGame; $('dialog').onclick = () => { if (state === 'dialog') advanceDialog(); };
   requestAnimationFrame(loop);
-  if (new URLSearchParams(location.search).has('saga')) startGame();          // arriving from the saga's title: straight in
+  if (HUB) startHub(); else if (QS.has('saga')) startGame();          // arriving from the saga: straight in
 }
 
 // Handy from the console, and what the dev keys (?dev, then 1–4) call.
@@ -1278,7 +1434,7 @@ const HOG = window.HOG = {
   warp(x, z, y) { P.x = x; P.z = z; P.y = y ?? groundBelow(x, z, 999); P.vx = P.vy = P.vz = 0; cam.tgt.set(P.x, P.y + 2.4, P.z); },
   spy: null, look(x, y, z, yaw = 0, pitch = 0.2, dist = 7) { HOG.spy = [x, y, z]; cam.yaw = yaw; cam.pitch = pitch; cam.dist = cam.cur = dist; },
   start: () => startGame(), skip() { endIntro(); while (state === 'dialog') { advanceDialog(); } },
-  bind: () => bindScene(), cine,
+  bind: () => bindScene(), cine, DOORS, prog, Progress,
   tick(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) frame(dt); },
   press(code) { HIT[code] = true; }, hold(code, on = true) { KEY[code] = on; },
 };
