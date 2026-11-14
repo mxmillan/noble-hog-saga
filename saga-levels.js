@@ -7,6 +7,7 @@
 //   ice(x, z)        optional: where the hog cannot grip
 //   start            [x, z, dirX, dirZ]
 //   ambience         sky, fog, light, weather (see setAmbience in saga.js)
+//   music            the tune it opens with (a name from hog-music.js); E.music(name) changes it part-way
 //   build(E)         place everything, using the engine handle E
 //   begin(E)         runs once the chapter is up: opening pages, first objective
 // The numbers passed to E.pages() are page numbers of the book (assets/book/p-NN.jpg).
@@ -75,7 +76,7 @@ const wet1 = s => FORDS.reduce((w, [p, q]) => Math.max(w, sstep(p, p + 4, s) * s
 const bank1 = s => BANK1_H * sstep(BANK1[0], BANK1[1], s) * sstep(BANK1[3], BANK1[2], s);
 const half1 = s => lerp(22, 7, sstep(64, 78, s));
 const L1 = {
-  chapter: 'Chapter the First', title: 'The Darkling Trail', bounds: [-72, 78, -498, 34], start: [0, -6, 0, -1], ambience: DAY,
+  chapter: 'Chapter the First', title: 'The Darkling Trail', music: 'town', bounds: [-72, 78, -498, 34], start: [0, -6, 0, -1], ambience: DAY,
   height(x, z) {
     const t = T1.locate(x, z);
     let h = 6.5 - 3.4 * wet1(t.s) + bank1(t.s) + edge(Math.abs(t.d) - half1(t.s), 'wall', x, z, t.s < 70 ? 15 : 22);
@@ -116,7 +117,7 @@ const L1 = {
     E.line('taco', 0, -14, 0, -34, 4); E.line('taco', 3, -48, 0, -68, 4); E.item('burrito', -6, -22, 9.4);
     E.flag(0, -70, -4);
     // The darkling trail.
-    E.trigger(...at(86).slice(0, 2), 8, () => E.pages([6], () => { E.ambience(DUSK); E.objective('Follow the darkling trail', [GLADE.x, GLADE.z + 20]); }));
+    E.trigger(...at(86).slice(0, 2), 8, () => E.pages([6], () => { E.ambience(DUSK); E.music('trail'); E.objective('Follow the darkling trail', [GLADE.x, GLADE.z + 20]); }));
     const inGlade = (x, z) => Math.hypot(x - GLADE.x, z - GLADE.z) < GLADE.r + 4;
     pines(E, T1, 84, 436, 7, { seed: 3, back: true, skip: inGlade });
     for (let i = 0; i < 64; i++) { const [x, z] = at(86 + r() * 345, (r() < 0.5 ? -1 : 1) * (4.2 + r() * 3)); if (!inGlade(x, z) && E.h(x, z) > 6) E.put(Models.buildMushroom(), x, z, 0, 0); }
@@ -143,10 +144,10 @@ const L1 = {
     const troll = E.troll({ x: -5, z: GLADE.z - 1, hx: GLADE.x + 3, hz: GLADE.z, yaw: Math.atan2(-9, -5),
       onHit: T => E.objective(`Fell the Tile Troll  ${pips(T.hp, 3)}`),
       onDefeat: T => E.later(1.4, () => {                 // "With a burst of light he cast the Tile Troll into exile."
-        E.flash('#fff', 1100); T.state = 'gone'; E.puff(T.x, T.y + 3, T.z, 0xffe9a0, 30, 12, 1.2, 1.2, 5); E.Sound.bolt(); E.GOL.cower = false;
+        E.flash('#fff', 1100); E.music('trail'); T.state = 'gone'; E.puff(T.x, T.y + 3, T.z, 0xffe9a0, 30, 12, 1.2, 1.2, 5); E.Sound.bolt(); E.GOL.cower = false;
         E.pages([8], () => E.say([['wizard', 'The Wizard', 'Exile! Staff blazing, pint untouched. Onward, hog-rider — the cold mountain will not climb itself.'], ['gollum', 'The Gollum Man', 'It is gone! The square-man is gone! We wept. We is not ashamed.']], () => E.complete([T.x, T.y + 3, T.z])));
       }) });
-    E.trigger(-5, GLADE.z - 1, 20, () => E.pages([7], () => { troll.wake(); E.GOL.cower = true; E.objective('Fell the Tile Troll  ●●●', null); E.bark('troll', 'TILE TROLL: Who disturbs my supper? I shall GROUT you where you stand! (Charge him — and mind the tiles.)', 6); }));
+    E.trigger(-5, GLADE.z - 1, 20, () => E.pages([7], () => { troll.wake(); E.music('boss'); E.GOL.cower = true; E.objective('Fell the Tile Troll  ●●●', null); E.bark('troll', 'TILE TROLL: Who disturbs my supper? I shall GROUT you where you stand! (Charge him — and mind the tiles.)', 6); }));
   },
   begin(E) { E.gollum(true); E.pages([4], () => E.objective('Seek the wizard in the town', [L1.wizard.x, L1.wizard.z])); },
 };
@@ -163,7 +164,7 @@ const GAPS2 = [[338, 346], [398, 406], [546, 554]], LEDGE2 = [[334.5, 349.5], [3
 const half2 = s => lerp(lerp(lerp(8, 15, sstep(142, 156, s)), 4.8, sstep(238, 256, s)), 6.5, sstep(596, 612, s));
 const iceAt2 = s => (s > 58 && s < 84) || (s > 112 && s < 138) || (s > 262 && s < 328) || (s > 352 && s < 390) || (s > 412 && s < 440) || (s > 508 && s < 536) || (s > 566 && s < 592);
 const L2 = {
-  chapter: 'Chapter the Second', title: 'The Cold Mountain', bounds: [-70, 82, -660, 34], start: [0, -6, 0, -1], ambience: SNOW,
+  chapter: 'Chapter the Second', title: 'The Cold Mountain', music: 'snow', bounds: [-70, 82, -660, 34], start: [0, -6, 0, -1], ambience: SNOW,
   height(x, z) {
     const t = T2.locate(x, z), a = Math.abs(t.d), hf = half2(t.s);
     if (t.s > 250 && a < hf + 1.5 && GAPS2.some(([p, q]) => t.s > p && t.s < q)) return -60;
@@ -237,7 +238,7 @@ const TAV = { x: 200, z: 0, hw: 15, hd: 11.5 }, COR = { x: 400, z0: 96, z1: -80,
 // The way out of the lair: a tunnel east, most of it a chasm bridged only by stones that sink.
 const ESC = { x0: THR.x + 15, x1: 502, hw: 4.6, gap: [434, 474], exit: 494 };
 const L3 = {
-  chapter: 'Chapter the Third', title: 'The Oasis', bounds: [-46, 514, -232, 106], cell: 2, start: [0, -6, 0, -1], ambience: NIGHT,
+  chapter: 'Chapter the Third', title: 'The Oasis', music: 'night', bounds: [-46, 514, -232, 106], cell: 2, start: [0, -6, 0, -1], ambience: NIGHT,
   height(x, z) {
     if (Math.abs(x - TAV.x) < TAV.hw && Math.abs(z - TAV.z) < TAV.hd) return 6.5;
     if (Math.abs(x - COR.x) < COR.hw && z < COR.z0 && z > COR.z1) return COR.gaps.some(([p, q]) => z < p && z > q) ? -60 : 6.5;
@@ -266,7 +267,7 @@ const L3 = {
     for (const sf of [66, 138]) { const [x, z] = at(sf); E.flag(x, z, -4); }
     { const [x, z] = at(176, -6.5); E.put(Models.buildHangingSign(['THE OASIS'], { palms: true }), x, z, 0.5, 0.1); E.addCyl(x, z, 0.5, 0.5, -5, 40, false); E.light(x, 12, z, 0xffc060, 30, 26); E.trigger(...at(170).slice(0, 2), 8, () => E.pages([19], () => E.objective('Reach the tavern door', DOOR3))); }
     E.put(Models.buildTavern(), DOOR3[0], DOOR3[1] - 6.8, 0, 0.3); E.light(DOOR3[0], 10, DOOR3[1] + 2, 0xffc060, 50, 34);
-    E.trigger(DOOR3[0], DOOR3[1], 3.4, () => E.pages([20, 21], () => E.teleport(TAV.x, 7, 0, -1, () => { E.objective('Seek the keeper of the bar', [TAV.x, -8]); E.bark('hog', 'Without warning or logic, he found himself astride his hog once more. Indoors.', 4.5); }, TAVERN, true)));
+    E.trigger(DOOR3[0], DOOR3[1], 3.4, () => E.pages([20, 21], () => E.teleport(TAV.x, 7, 0, -1, () => { E.music('tavern'); E.objective('Seek the keeper of the bar', [TAV.x, -8]); E.bark('hog', 'Without warning or logic, he found himself astride his hog once more. Indoors.', 4.5); }, TAVERN, true)));
     // The tavern.
     const [a, b, c, d] = [TAV.x - 13.5, TAV.x + 13.5, -10, 10];
     wall(a - 1, b + 1, c - 1, c, 9, timber); wall(a - 1, b + 1, d, d + 1, 9, timber); wall(a - 1, a, c, d, 9, timber); wall(b, b + 1, c, d, 9, timber);
@@ -288,7 +289,7 @@ const L3 = {
       onTalk(n) { const i = Math.min(n.i++, 2); E.pages(i === 0 ? [22] : i === 2 && !L3.ales ? [23] : [], () => E.say(sung[i], () => {
         if (i === 2 && !L3.ales) { L3.ales = true; ales.forEach(m => { m.visible = true; }); E.Sound.heal(); E.P.hp = E.P.maxHp; E.P.fuel = 1; door.material.color.set(0xffd45a); E.light(TAV.x + 10.6, 7.5, -8.6, 0xffd45a, 30, 16); E.objective('A small square door hums behind the bar', [TAV.x + 10.6, -8]); E.toast('A solemn row of ales. Hearts and gas restored.', 3.5); }
       })); } });
-    E.trigger(TAV.x + 10.6, -7.9, 2.5, () => { if (L3.through) return; if (!L3.ales) return E.bark('barkeep', 'THE BARKEEP: Not that door. Nobody goes through that door.', 3); L3.through = true; E.pages([24], () => E.teleport(COR.x, COR.z0 - 6, 0, -1, () => E.objective("Into the mountain's belly", [THR.x, -76]), CAVE, true)); }, { repeat: true });
+    E.trigger(TAV.x + 10.6, -7.9, 2.5, () => { if (L3.through) return; if (!L3.ales) return E.bark('barkeep', 'THE BARKEEP: Not that door. Nobody goes through that door.', 3); L3.through = true; E.pages([24], () => E.teleport(COR.x, COR.z0 - 6, 0, -1, () => { E.music('lair'); E.objective("Into the mountain's belly", [THR.x, -76]); }, CAVE, true)); }, { repeat: true });
     // The candlelit corridor.
     for (const sd of [-1, 1]) wall(COR.x + sd * 4.1 - 0.5, COR.x + sd * 4.1 + 0.5, -79.2, COR.z0 + 1, 8.5, rock);   // right up to the lair's ring, so there is no way round it
     wall(COR.x - 4.6, COR.x + 4.6, COR.z0, COR.z0 + 1, 8.5, rock);
@@ -325,7 +326,7 @@ const L3 = {
         E.relic([maiden.x, maiden.y + 3, maiden.z], () => E.pages([26], () => { E.objective('Burst forth from the lair!', [ESC.exit, THR.z]); E.bark('gollum', 'THE GOLLUM MAN: Up! Up on the hog! East, Hog Man — and do not stop on the stones!', 5); }));
       }) });
     L3.reset = () => { E.gollum(true, { mode: 'stay', x: THR.x - 3.5, z: THR.z - 12, hx: 0, hz: 1, frame: 'gol_crouch' }); };
-    E.trigger(THR.x, THR.z + 13.5, 4, () => E.pages([25], () => E.say([
+    E.trigger(THR.x, THR.z + 13.5, 4, () => E.music('boss') || E.pages([25], () => E.say([
       ['maiden', 'The Shield-Maiden', 'You rode a hog through my door. Through my SMALL door. He is mine now, hog-rider. He carries things.'],
       ['gollum_crouch', 'The Gollum Man', 'It makes us carry the firewood. And the shield. The shield is HEAVY, Hog Man!'],
     ], () => { arena.gate = undefined; maiden.start(); E.objective('Best the shield-maiden  ●●●', null); E.bark('maiden', 'No charge breaks a shield from the front. Wait for her to tire — or get behind her.', 6); })));
@@ -351,7 +352,7 @@ function keepH(x, z) {
   return K.top;                                                    // inside the highest turn: the hall
 }
 const L4 = {
-  chapter: 'Chapter the Fourth', title: 'The White Castle', bounds: [-74, 74, -288, 136], cell: 1.5, start: [7, 113, -0.33, -0.94], ambience: FROST,
+  chapter: 'Chapter the Fourth', title: 'The White Castle', music: 'castle', bounds: [-74, 74, -288, 136], cell: 1.5, start: [7, 113, -0.33, -0.94], ambience: FROST,
   height(x, z) {
     const kh = keepH(x, z); if (kh !== null) return kh;
     const t = T4.locate(x, z), river = sstep(RIVER4[0], RIVER4[0] + 3, t.s) * sstep(RIVER4[1], RIVER4[1] - 3, t.s);
@@ -426,7 +427,7 @@ const L4 = {
     });
     // "No longer a simple hog, she had become a swine of glory."
     const takeWing = () => {
-      E.ambience(SUNSET, true); E.gollum(true, { mode: 'ride' });
+      E.ambience(SUNSET, true); E.music('flight'); E.gollum(true, { mode: 'ride' });
       const rings = []; for (let i = 0; i < 16; i++) rings.push([Math.sin(i * 0.85) * 34, top + 16 + Math.sin(i * 0.6 + 1) * 13, K.z - 160 - i * 58]);
       // The scene: she stands in the lamp-light; the wings come; a run at the window; out, and away over the cloud.
       const wz = K.z - 15.6, cam = E.camera, bez = (a, b, c, k) => (1 - k) * (1 - k) * a + 2 * (1 - k) * k * b + k * k * c, V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -451,7 +452,7 @@ const L4 = {
       }, done: () => { E.flight({ x: P.x, y: P.y, z: P.z, rings, done: () => E.pages([46, 47], () => E.complete()) }); } });
     };
     { const [x, z] = spiral(0.985); E.trigger(x, z, 5, () => { hall = true; E.pages([33, 34], () => E.objective('Approach the sacred table', [K.x, tblZ + 4])); }, { y: top }); E.flag(K.x, K.z + 11, -4); }
-    E.trigger(K.x, tblZ + 4.5, 4.2, () => { hall = true; E.pages([35, 36, 37, 38], () => { P.hp = P.maxHp; P.fuel = 1; E.Sound.heal(); E.toast('Conquest is crowned in cheddar and grease.', 3.5); E.later(2.6, () => E.pages([39], () => { arena.on = true; towerWave(); })); }); }, { y: top });
+    E.trigger(K.x, tblZ + 4.5, 4.2, () => { hall = true; E.pages([35, 36, 37, 38], () => { P.hp = P.maxHp; P.fuel = 1; E.Sound.heal(); E.toast('Conquest is crowned in cheddar and grease.', 3.5); E.later(2.6, () => E.pages([39], () => { arena.on = true; E.music('boss'); towerWave(); })); }); }, { y: top });
     L4.onRespawn = () => { /* the villains wait for the hog to climb back; nothing to reset */ };
     L4.wing = takeWing;                                 // for tests: play the take-off scene directly
   },
@@ -483,7 +484,7 @@ const ROCKSF = [[44, 2.2], [62, -2.2], [80, 2.4], [92, -2.4], [104, 2.2], [132, 
 const BEAMSF = [50, 150, 172, 286, 310, 320, 394];       // all on stretches that run due north: a beam is an axis-aligned box
 const wetF = s => sstep(RIVERF[0], RIVERF[0] + 4, s) * sstep(RIVERF[1] + 2, RIVERF[1] - 2, s);
 const LF = {
-  side: true, id: 'ferry', chapter: 'A Side Road', title: 'The Long Water', bounds: [-42, 46, -458, 28], start: [0, -3, 0, -1], ambience: DAY,
+  side: true, id: 'ferry', chapter: 'A Side Road', title: 'The Long Water', music: 'river', bounds: [-42, 46, -458, 28], start: [0, -3, 0, -1], ambience: DAY,
   height(x, z) { const t = TF.locate(x, z); return 6.5 - 5.5 * wetF(t.s) + edge(Math.abs(t.d) - 10, 'wall', x, z, 17); },
   tint(c, x, z, h, ny) { const t = TF.locate(x, z); if (h < 5.5) c.set(0x5a6a58); else if (ny < 0.74) c.set(0x7a7468); else c.set((t.s < 12 || t.s > 404) && Math.abs(t.d) < 9.5 ? 0xd9c48a : 0x6fa84a); },
   build(E) {
@@ -533,7 +534,7 @@ const LF = {
 const MB = { r: 16, floor: 6.5, landA: [-1.97, -11.33, 21], landB: [-10.63, 4.39, 33.2], landC: [-2.8, 11.15, 47.4], hoist: [-4.58, 10.0], top: [11.2, 1.0, 55.4] };
 const ringM = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
 const LM = {
-  side: true, id: 'mill', chapter: 'A Side Road', title: 'The Belly of the Mill', bounds: [-21, 21, -21, 21], cell: 1.5, start: [7.1, -4.9, 0.57, 0.82], ambience: MILLDARK, drop: 10,      // the start must have nothing overhead: the hog is set on the highest floor at that spot
+  side: true, id: 'mill', chapter: 'A Side Road', title: 'The Belly of the Mill', music: 'mill', bounds: [-21, 21, -21, 21], cell: 1.5, start: [7.1, -4.9, 0.57, 0.82], ambience: MILLDARK, drop: 10,      // the start must have nothing overhead: the hog is set on the highest floor at that spot
   height(x, z) { return Math.hypot(x, z) < 17.3 ? MB.floor : -110; },
   tint(c, x, z) { c.set((Math.floor(x / 3) + Math.floor(z / 9)) % 2 ? 0x8a6a44 : 0x7a5c3a); },
   build(E) {
@@ -606,7 +607,7 @@ const halfV = s => lerp(6.5, 10.5, sstep(380, 386, s));
 const CHIPSV = [[94.5, 1.2, 0], [100.7, -1.2, 0], [106.9, 1.2, 0], [113.1, -1.2, 0], [119.3, 0, 0],
   [204.5, 0, 0], [210.7, 1, 1], [216.9, -0.5, 0], [223.1, 0, 0], [229.5, 0, 2], [235.9, 0, 0], [242.1, 0, 1], [247.4, 0, 0]];
 const LV = {
-  side: true, id: 'molcajete', chapter: 'A Side Road', title: 'Mount Molcajete', bounds: [-76, 96, -436, 70], cell: 2, start: [0, -4, 0, -1], ambience: MOLTEN,
+  side: true, id: 'molcajete', chapter: 'A Side Road', title: 'Mount Molcajete', music: 'salsa', bounds: [-76, 96, -436, 70], cell: 2, start: [0, -4, 0, -1], ambience: MOLTEN,
   height(x, z) { const t = TV.locate(x, z), a = Math.abs(t.d), p = pathV(t.s), hw = halfV(t.s); return Math.max(lerp(p, Math.min(p, 2), sstep(hw, hw + 3.5, a)), 36 * sstep(44, 60, a)); },
   tint(c, x, z, h, ny) { const t = TV.locate(x, z), a = Math.abs(t.d); if (a > 42) c.set(ny < 0.8 ? 0x3a2c28 : 0x4a3a34); else if (h < 7.6) c.set(0x2c2220); else if (ny < 0.74) c.set(0x3a302c); else c.set(t.s > 384 ? 0x7a6a60 : 0x64544c); },
   nosafe(x, z) { const s = TV.locate(x, z).s; return LOWV.some(([p, q]) => s > p - 2 && s < q + 2); },       // never put him back on a causeway: it may be under
@@ -656,7 +657,7 @@ const MK = { cells: [-44, -22, 0, 22, 44], half: 7, low: 4.2, tall: 8, roads: [-
 const ROUTEK = [[11, 33], [11, 11], [33, 11], [33, -11], [11, -11], [11, -33], [-11, -33], [-11, -11], [-33, -11], [-33, 11], [-11, 11], [-11, 33]];
 const AWNINGS = [0xc83a2c, 0xe8b23a, 0x3f8a5a, 0x7a4a9a, 0x2f6aa8, 0xd8703a];
 const LK = {
-  side: true, id: 'market', chapter: 'A Side Road', title: 'The Night Market', bounds: [-72, 72, -72, 72], start: [11, 56, 0, -1], ambience: LANTERNS,
+  side: true, id: 'market', chapter: 'A Side Road', title: 'The Night Market', music: 'market', bounds: [-72, 72, -72, 72], start: [11, 56, 0, -1], ambience: LANTERNS,
   height(x, z) { return 6.5 + edge(Math.max(Math.abs(x), Math.abs(z)) - 59, 'wall', x, z, 14); },
   tint(c, x, z, h, ny) { if (ny < 0.74) c.set(0x3a3440); else c.set((Math.floor(x / 3) + Math.floor(z / 3)) % 2 ? 0x6a6470 : 0x5c5664); },
   build(E) {

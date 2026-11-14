@@ -5,8 +5,9 @@
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=6';
-import { LEVELS } from './saga-levels.js?v=3';
+import { LEVELS } from './saga-levels.js?v=4';
 import * as Progress from './hog-progress.js?v=2';
+import { makePlayer } from './hog-music.js?v=1';
 const MAIN = LEVELS.filter(l => !l.side).length;       // the book's chapters come first in LEVELS; the side roads follow
 
 // ───────────────────────────── utils ─────────────────────────────
@@ -76,7 +77,7 @@ function rep(tex, x, y) { const t = tex.clone(); t.repeat.set(x, y); t.needsUpda
 
 // ───────────────────────────── sound (all synthesised) ─────────────────────────────
 const Sound = (() => {
-  let ac = null, master = null, muted = false, nextT = 0, stepI = 0;
+  let ac = null, master = null, muted = false;
   const f = m => 440 * Math.pow(2, (m - 69) / 12);
   function tone(freq, dur, type = 'square', vol = 0.12, to = 0, at = 0) {
     if (!ac) return; const t = ac.currentTime + at, o = ac.createOscillator(), g = ac.createGain();
@@ -92,24 +93,14 @@ const Sound = (() => {
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     s.connect(fl); fl.connect(g); g.connect(master); s.start(t);
   }
-  // A little Andalusian-cadence loop (Am G F E), eighth notes.
-  const ROOT = [45, 43, 41, 40];
-  const LEAD = [69, 0, 72, 76, 0, 72, 69, 0, 67, 0, 71, 74, 0, 71, 67, 0, 65, 0, 69, 72, 0, 69, 65, 0, 76, 77, 76, 74, 72, 71, 68, 64,
-                76, 0, 76, 77, 76, 0, 72, 0, 74, 0, 74, 76, 74, 0, 71, 0, 72, 0, 72, 74, 72, 0, 69, 0, 71, 72, 71, 68, 64, 0, 64, 0];
-  function music() {
-    if (!ac) return;
-    while (nextT < ac.currentTime + 0.3) {
-      const at = nextT - ac.currentTime, i = stepI % 64, bar = (i >> 3) % 4, s = i & 7;
-      if (s === 0 || s === 3 || s === 6) tone(f(ROOT[bar]), 0.22, 'triangle', 0.09, 0, at);
-      if (s === 4) tone(f(ROOT[bar] + 7), 0.18, 'triangle', 0.06, 0, at);
-      if (LEAD[i]) tone(f(LEAD[i]), 0.17, 'square', 0.022, 0, at);
-      if (s % 2 === 0) noise(0.03, 0.02, 6000, 0, at);
-      nextT += 0.2; stepI++;
-    }
-  }
+  // The tunes and the sequencer are in hog-music.js; this hands it the two voices above.
+  const player = makePlayer(tone, noise);
+  function music() { if (ac) player.tick(ac.currentTime); }
   return {
     init() { if (ac) return; ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.6;
-      master.connect(ac.destination); nextT = ac.currentTime + 0.1; setInterval(music, 100); },
+      master.connect(ac.destination); setInterval(music, 100); },
+    tune(n) { player.play(n); },                         // change tune: a name from TUNES in hog-music.js
+    playing: () => player.name,
     wake() { if (ac && ac.state === 'suspended') ac.resume(); },
     toggle() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.6; return muted; },
     jump() { tone(300, 0.16, 'square', 0.08, 620); },
@@ -925,7 +916,7 @@ function loop(t) { const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT
 function beginLevel(i) {
   loadLevel(i); state = 'play'; $('hud').hidden = false;
   $('hud').classList.remove('flying'); $('bark').hidden = true; $('book').hidden = true; $('dialog').hidden = true;
-  cardDue = true; world.level.begin(E);
+  Sound.tune(world.level.music || 'windmill'); cardDue = true; world.level.begin(E);
 }
 // Progress (hog-progress.js) is the chapters finished. The windmill country (hog3d.html?hub) is the hub they open
 // off: each chapter is entered through a door there (./?level=n) and, once finished, hands back to it.
@@ -979,7 +970,7 @@ function finishLevel() {
   const fresh = pr.done < i + 1, back = `&from=${i + 1}${fresh ? '&new' : ''}`;
   pr.pro = true; pr.done = Math.max(pr.done, i + 1); Progress.save(pr); Sound.win();
   if (i + 1 < MAIN) return toHub(back, 900);
-  fadeThen(() => { state = 'end'; $('hud').hidden = true;
+  fadeThen(() => { state = 'end'; $('hud').hidden = true; Sound.tune('windmill');
     const m = Math.floor(playTime / 60), s = Math.floor(playTime % 60);
     $('end-stats').innerHTML = `The Food of the Lamp is yours.<br>Time ${m}:${String(s).padStart(2, '0')}<br>Morsels eaten ${foodAll}<br>Tumbles ${deaths}` + (fly.rings.length ? `<br>Rings ${fly.got}/${fly.rings.length}` : '');
     $('again').onclick = () => toHub(back);
@@ -998,6 +989,7 @@ const E = {
   line(type, x0, z0, x1, z1, n) { for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : i / (n - 1); addItem(type, lerp(x0, x1, t), lerp(z0, z1, t)); } },
   ring(o) { world.rings.push(o); return o; },
   light(x, y, z, colour = 0xffb060, strength = 60, reach = 40) { const l = new THREE.PointLight(colour, strength, reach, 1.6); l.position.set(x, y, z); world.g.add(l); return l; },
+  music(n) { Sound.tune(n); },                              // change the tune part-way through a chapter
   say, pages, bark, toast, objective: setObjective, ambience: setAmbience, hurt, complete: completeLevel, relic: awardRelic,
   troll: spawnTroll, maiden: spawnMaiden, thrower: spawnThrower, caster: spawnCaster, rollers: spawnRollers, actor, flight: startFlight,
   // indoors: look down over the walls rather than be squeezed against them

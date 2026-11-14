@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=6';
 import * as Progress from './hog-progress.js?v=2';
+import { makePlayer } from './hog-music.js?v=1';
 
 // ───────────────────────────── utils ─────────────────────────────
 const $ = id => document.getElementById(id);
@@ -144,7 +145,7 @@ function rep(tex, x, y) { const t = tex.clone(); t.repeat.set(x, y); t.needsUpda
 
 // ───────────────────────────── sound (all synthesised) ─────────────────────────────
 const Sound = (() => {
-  let ac = null, master = null, muted = false, nextT = 0, stepI = 0;
+  let ac = null, master = null, muted = false;
   const f = m => 440 * Math.pow(2, (m - 69) / 12);
   function tone(freq, dur, type = 'square', vol = 0.12, to = 0, at = 0) {
     if (!ac) return; const t = ac.currentTime + at, o = ac.createOscillator(), g = ac.createGain();
@@ -160,24 +161,14 @@ const Sound = (() => {
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     s.connect(fl); fl.connect(g); g.connect(master); s.start(t);
   }
-  // A little Andalusian-cadence loop (Am G F E), eighth notes.
-  const ROOT = [45, 43, 41, 40];
-  const LEAD = [69, 0, 72, 76, 0, 72, 69, 0, 67, 0, 71, 74, 0, 71, 67, 0, 65, 0, 69, 72, 0, 69, 65, 0, 76, 77, 76, 74, 72, 71, 68, 64,
-                76, 0, 76, 77, 76, 0, 72, 0, 74, 0, 74, 76, 74, 0, 71, 0, 72, 0, 72, 74, 72, 0, 69, 0, 71, 72, 71, 68, 64, 0, 64, 0];
-  function music() {
-    if (!ac) return;
-    while (nextT < ac.currentTime + 0.3) {
-      const at = nextT - ac.currentTime, i = stepI % 64, bar = (i >> 3) % 4, s = i & 7;
-      if (s === 0 || s === 3 || s === 6) tone(f(ROOT[bar]), 0.22, 'triangle', 0.09, 0, at);
-      if (s === 4) tone(f(ROOT[bar] + 7), 0.18, 'triangle', 0.06, 0, at);
-      if (LEAD[i]) tone(f(LEAD[i]), 0.17, 'square', 0.022, 0, at);
-      if (s % 2 === 0) noise(0.03, 0.02, 6000, 0, at);
-      nextT += 0.2; stepI++;
-    }
-  }
+  // The tunes and the sequencer are in hog-music.js; this hands it the two voices above.
+  const player = makePlayer(tone, noise);
+  function music() { if (ac) player.tick(ac.currentTime); }
   return {
     init() { if (ac) return; ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.6;
-      master.connect(ac.destination); nextT = ac.currentTime + 0.1; setInterval(music, 100); },
+      master.connect(ac.destination); setInterval(music, 100); },
+    tune(n) { player.play(n); },                         // change tune: a name from TUNES in hog-music.js
+    playing: () => player.name,
     wake() { if (ac && ac.state === 'suspended') ac.resume(); },
     toggle() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.6; return muted; },
     jump() { tone(300, 0.16, 'square', 0.08, 620); },
@@ -957,6 +948,7 @@ function stepGollum(dt) {
       face(dx, dz);
       if (onDeck() && P.grounded) {
         checkpoint = { x: cx + Math.cos(GATE_ANG) * 7.5, y: MILL.deckY, z: cz + Math.sin(GATE_ANG) * 7.5 }; Sound.check();
+        Sound.tune('boss');
         say([['gol_idle', 'The Gollum Man', 'It climbed. It actually climbed. On a PIG. Nowhere left to run, precious…'],
              ['gol_crouch', 'The Gollum Man', '…so we bites it instead! Come, piggy-man. Catch us three times, if it can!'],
              ['hog_idle', 'The Hog', 'Oink.']], () => { G.state = 'flee'; G.lungeT = 4; G.met = true; setObjective('Catch the Gollum Man!  0/3'); });
@@ -1015,7 +1007,7 @@ function stepGollum(dt) {
 }
 
 function win() {
-  hasRing = true; Sound.win(); updateHUD(); $('bark').hidden = true; $('prompt').hidden = true; setObjective('The Ring is reclaimed!');
+  hasRing = true; Sound.tune('windmill'); Sound.win(); updateHUD(); $('bark').hidden = true; $('prompt').hidden = true; setObjective('The Ring is reclaimed!');
   P.vx = P.vz = 0; P.charge = 0;
   say([['gol_crouch', 'The Gollum Man', 'It has its ring back. Mercy, piggy-man! Do not throw us off the mill. It is such a long way down.'],
        ['gol_idle', 'The Gollum Man', 'We is useful! We knows things. We knows where the LAMP is. The Lamp, and the food that lies beneath it…'],
@@ -1434,7 +1426,7 @@ const HOG = window.HOG = {
   warp(x, z, y) { P.x = x; P.z = z; P.y = y ?? groundBelow(x, z, 999); P.vx = P.vy = P.vz = 0; cam.tgt.set(P.x, P.y + 2.4, P.z); },
   spy: null, look(x, y, z, yaw = 0, pitch = 0.2, dist = 7) { HOG.spy = [x, y, z]; cam.yaw = yaw; cam.pitch = pitch; cam.dist = cam.cur = dist; },
   start: () => startGame(), skip() { endIntro(); while (state === 'dialog') { advanceDialog(); } },
-  bind: () => bindScene(), cine, DOORS, prog, Progress,
+  bind: () => bindScene(), cine, DOORS, prog, Progress, Sound,
   tick(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) frame(dt); },
   press(code) { HIT[code] = true; }, hold(code, on = true) { KEY[code] = on; },
 };

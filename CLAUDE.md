@@ -356,6 +356,22 @@ work like Mario 64's castle). `HUB` (the `?hub` query) switches `hog3d.js` from 
 - **Testing:** set `localStorage['hogSaga.progress']` by hand, then open `hog3d.html?hub&from=n`.
   `HOG.DOORS`, `HOG.prog` are exposed. `SAGA.E.complete()` finishes the current chapter.
 
+### Music — `hog-music.js`
+
+There are no audio files. Both pages import `makePlayer(tone, noise)` and hand it their own two
+synth voices; `Sound.tune(name)` changes tune and `Sound.playing()` says which is on.
+
+- **A tune is data** in `TUNES`: a step length, a bar length (8, or 6 for the jig and the
+  boat-song), a bass note per bar, and a lead written one token per step (a MIDI note, `.` for a
+  rest, `-` to hold). The header comment in the file has the format. The lead must be a whole
+  number of bars; the check used when writing them is easy to redo in `node`.
+- **Each level names its opening tune** (`music:` on the level object, set in `beginLevel`) and
+  changes it with `E.music(name)`: chapter 1 goes town → trail → boss → trail; chapter 3 night →
+  tavern → lair → boss; chapter 4 castle → boss → flight. The windmill country (prologue, hub and
+  the saga's title) keeps the original Andalusian tune, with `boss` for the fight on the deck.
+- **Nobody has listened to these.** They were composed as note lists and checked only by
+  rendering each offline for level and clipping. Treat the melodies as a first draft.
+
 ### The side roads — four levels that are not in the book
 
 `LF`, `LM`, `LV`, `LK` at the end of `saga-levels.js`: `LEVELS[4..7]`, opened as `./?level=5..8`,
