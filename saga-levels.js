@@ -158,6 +158,7 @@ const T2 = makeTrail([[0, 0], [0, -85], [-32, -150], [8, -215], [44, -270], [44,
 const END2 = 666;                                   // where the shadow waits
 // Above the pass: a knife-edge (a drop on both sides, s 500–600), then a last gully with snowballs.
 const EDGE2 = [500, 600];
+const GATE2 = 251;                                   // the wall and portcullis across the pass, past the man in the tower
 // Each chasm in the pass is cut wide in the ground, then given two stone ledges whose edges set the real gap.
 // (The ground grid is too coarse to place a chasm's lip exactly: cut by the grid alone, these were unjumpable.)
 const GAPS2 = [[338, 346], [398, 406], [546, 554]], LEDGE2 = [[334.5, 349.5], [394.5, 409.5], [542.5, 557.5]];
@@ -185,21 +186,106 @@ const L2 = {
       make() { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), E.lam(0xf4f7fa))); return g; }, active: () => { const s = sOf(); return s > 6 && s < 152; } });
     for (const [s, n, type] of [[14, 4, 'taco'], [40, 3, 'taco'], [92, 4, 'burger'], [144, 3, 'taco'], [176, 4, 'taco'], [226, 3, 'burger']]) for (let i = 0; i < n; i++) { const [x, z] = at(s + i * 4.5, Math.sin(s * 1.3 + i * 2) * 4); E.item(type, x, z); }
     for (const [s, rad, sp] of [[50, 5.5, 5], [104, 5.5, -5.5], [222, 8, 5.5]]) { const [x, z] = at(s); E.crow(x, z, rad, sp); }
-    for (const s of [146, 252, 352, 412, 486, 562, 606]) { const [x, z] = at(s, s > 480 ? 0 : -1.5); E.flag(x, z, -2.2); }
-    // The ruin, and the man in the tower.
+    for (const s of [146, GATE2 + 11, 352, 412, 486, 562, 606]) { const [x, z] = at(s, s > 480 ? 0 : -1.5); E.flag(x, z, -2.2); }
+    // The ruin, and the man in the tower. The pass beyond is barred by a portcullis with a gap beneath it: too low for a hog,
+    // too tight for a dry Gollum Man. He must be slicked with the man's slop three times over (a bucket on him that misses the
+    // hog, or a second sat in the puddle one leaves), and then he squeezes under and winds the gate up from the far side.
+    // Trailing through a puddle, or a bucket that hits the pair of them, does not count: with either, the first version slimed
+    // him on the way up to the gate without the player trying.
     const [tx, tz] = at(202, 13), [px, pz] = at(202, 0), ty = E.ground(tx, tz), tyaw = Math.atan2(px - tx, pz - tz), fx = Math.sin(tyaw), fz = Math.cos(tyaw);
     E.put(Models.buildBentTower(), tx, tz, tyaw, 0.6); E.addCyl(tx, tz, 4.1, 3.2, -99, 99, false).occlude = true;
     rocks(E, [[tx - 9, tz + 9, 1.4], [tx + 2, tz + 12, 1.1], [tx - 12, tz - 6, 1.7]], 0x8f96a4);
     const man = Models.buildFolk({ angry: true, bareArms: true, hair: '#6a4a2a', coat: ['#6b5a3a', '#5a4a2e', '#7c6a48'] }); E.world.g.add(man.g);
+    const G = E.GOL, muck = { n: 0, need: 3, pools: [], done: false, how: [] }, [gx, gz, gdx, gdz] = at(GATE2), gy = E.ground(gx, gz), gyaw = Math.atan2(gdx, gdz);
+    const slop = E.lam(0x5a4020), poolG = new THREE.CircleGeometry(1, 12).rotateX(-Math.PI / 2);
     // He leans from the window, which sits off-centre because the tower itself leans.
-    const tower = E.thrower({ x: tx + fx * 2.3 - Math.cos(tyaw) * 1.4, z: tz + fz * 2.3 + Math.sin(tyaw) * 1.4, y: ty + 7.6, m: man, yaw: tyaw, period: 2.5, first: 99, src: A => [A.x + fx * 1.4, A.y + 4.6, A.z + fz * 1.4], active: () => { const s = sOf(); return s > 158 && s < 246; } });
+    const tower = E.thrower({ x: tx + fx * 2.3 - Math.cos(tyaw) * 1.4, z: tz + fz * 2.3 + Math.sin(tyaw) * 1.4, y: ty + 7.6, m: man, yaw: tyaw, period: 2.5, first: 99, src: A => [A.x + fx * 1.4, A.y + 4.6, A.z + fz * 1.4],
+      active: () => { const s = sOf(); return s > 158 && s < GATE2 + 6; },
+      splash(x, y, z) {                                  // every bucket that misses leaves a puddle for a while
+        let p = muck.pools.find(q => q.life <= 0); if (!p) { p = { m: E.mesh(poolG, new THREE.MeshLambertMaterial({ color: 0x5a4020, transparent: true, depthWrite: false })) }; muck.pools.push(p); }
+        Object.assign(p, { x, z, y, life: 5, used: false, soak: 0 }); p.m.visible = true; p.m.position.set(x, y + 0.06, z); p.m.scale.setScalar(2.3);
+        // Straight onto him counts only if it misses the hog: the trick is to ride out from under the ring and let him trail into it.
+        const hogHit = Math.hypot(E.P.x - x, E.P.z - z) < 2.7 && E.P.y - y < 2.5;
+        if (!hogHit && Math.hypot(G.x - x, G.z - z) < 2.3) { p.used = true; muck.how.push('hit'); coat(); }
+      } });
+    const pip = () => pips(muck.n, muck.need), gateAt = [gx, gz];
+    L2.muck = muck; L2.tower = tower; L2.gateScene = () => gateScene();          // for test bots
+    const coat = (quiet) => {
+      if (muck.done || muck.n >= muck.need) return;
+      muck.n++; E.muck(muck.n / muck.need); E.Sound.splat(); E.puff(G.x, G.y + 1.2, G.z, 0x5a4020, 14, 5, 0.5, 0.6, 2, 12);
+      if (quiet) return;
+      if (muck.n < muck.need) { E.objective(`Slime the Gollum Man  ${pip()}`, gateAt); E.bark('gollum_hurt', 'THE GOLLUM MAN: Slicker… slicker… Once more, Hog Man, and we slides like an eel.', 4); }
+      else E.later(0.6, () => E.say([
+        ['gollum', 'The Gollum Man', 'Foul. FOUL. Foul to the bone, Hog Man… and slick. Slick fits through small places. Watch us.'],
+        ['hog', 'Juli the Hog', 'Oink.'],
+      ], gateScene));
+    };
+    E.actor({ step(dt) {
+      for (const p of muck.pools) if (p.life > 0) {
+        p.life -= dt; p.m.material.opacity = Math.min(0.85, p.life * 0.8); p.m.scale.setScalar(2.3 * (0.75 + 0.25 * Math.min(1, p.life)));
+        if (p.life <= 0) { p.m.visible = false; continue; }
+        const inIt = !p.used && muck.n > 0 && Math.hypot(G.x - p.x, G.z - p.z) < 2.3 && Math.abs(G.y - p.y) < 2;
+        p.soak = inIt ? p.soak + dt : Math.max(0, p.soak - dt * 2);
+        if (inIt && Math.random() < dt * 14) E.puff(G.x + (Math.random() - 0.5) * 1.4, G.y + 0.2, G.z + (Math.random() - 0.5) * 1.4, 0x5a4020, 1, 2.5, 0.3, 0.4, 2, 14);
+        if (p.soak >= 1) { p.used = true; muck.how.push('soak'); coat(); }
+      }
+      if (G.muck && Math.random() < dt * 5 * G.muck) E.puff(G.x + (Math.random() - 0.5) * 0.8, G.y + 0.9 + Math.random() * 0.6, G.z + (Math.random() - 0.5) * 0.8, 0x5a4020, 1, 0.3, 0.22, 0.6, 0, 14);   // he drips
+    }, draw() {} });
+    // The wall across the pass, the gate in it, and the winch that raises it from the far side.
+    const stoneW = (len) => E.lam(0xffffff, E.rep(M.tex.wall, len / 3, 2.6)), iron = E.lam(0x4a4640);
+    for (const [l0, l1] of [[-10.5, -2.3], [2.3, 8.5]]) { const [x, z] = at(GATE2, (l0 + l1) / 2), w = E.mesh(new THREE.BoxGeometry(l1 - l0, 9.4, 1.5), stoneW(l1 - l0), x, gy + 1.7, z); w.rotation.y = gyaw; }
+    for (const l of [-2.6, 2.6]) { const [x, z] = at(GATE2, l); E.mesh(new THREE.BoxGeometry(1.4, 7.8, 1.9), stoneW(1.4), x, gy + 3.9, z).rotation.y = gyaw; }
+    E.mesh(new THREE.BoxGeometry(6.6, 1.3, 1.9), stoneW(6.6), gx, gy + 6.95, gz).rotation.y = gyaw;
+    const port = new THREE.Group(); port.position.set(gx, gy + 0.95, gz); port.rotation.y = gyaw; E.world.g.add(port);
+    for (let i = -3; i <= 3; i++) E.mesh(new THREE.BoxGeometry(0.17, 5.3, 0.17), iron, i * 0.6, 2.65, 0, port);
+    for (const y of [1.0, 2.4, 3.8, 5.0]) E.mesh(new THREE.BoxGeometry(4.2, 0.15, 0.15), iron, 0, y, 0, port);
+    for (let i = -3; i <= 3; i++) E.mesh(new THREE.ConeGeometry(0.13, 0.4, 4), iron, i * 0.6, -0.2, 0, port).rotation.x = Math.PI;
+    const wall = [], bars = []; for (let l = -11; l <= 9; l += 0.9) { const [x, z] = at(GATE2, l), c = E.addCyl(x, z, 0.75, 0.75, gy - 3, gy + 13, false); (Math.abs(l) < 2.4 ? bars : wall).push(c); }
+    // The winch sits just behind the opening, so the scene's camera sees it through the gate.
+    const [wx, wz] = at(GATE2 + 4.4, -2.9), wy = E.ground(wx, wz), winch = new THREE.Group(); winch.position.set(wx, wy, wz); winch.rotation.y = gyaw; E.world.g.add(winch);
+    for (const sx of [-0.85, 0.85]) E.mesh(new THREE.BoxGeometry(0.25, 1.6, 0.25), M.woodDark, sx, 0.8, 0, winch);
+    const drum = new THREE.Group(); drum.position.set(0, 1.35, 0); winch.add(drum);
+    E.mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.5, 8).rotateZ(Math.PI / 2), M.wood, 0, 0, 0, drum); E.mesh(new THREE.BoxGeometry(0.15, 0.9, 0.15), iron, 1.0, 0.45, 0, drum);
+    E.addCyl(wx, wz, 1.0, 1.0, wy - 1, wy + 1.8, false);
+    // The scene: he crawls to the gap, flattens, slides under, winds the gate up, and the man in the tower laughs.
+    const gateScene = () => {
+      const a0 = [G.x, G.z], [bx, bz] = at(GATE2 - 1.8, 0), [cx2, cz2] = at(GATE2 + 1.9, 0), [dx2, dz2] = at(GATE2 + 3.1, -1.7), [ex, ez] = at(GATE2 + 1.2, 1.4), cam = E.camera;
+      const [cpx, cpz] = at(GATE2 - 9, 3), [lkx, lkz] = at(GATE2, 0), [fpx, fpz] = at(GATE2 + 13, -1.5), [flx, flz] = at(GATE2 + 1.5, -0.6), legs = [[0, 1.6, a0, [bx, bz]], [1.6, 3.4, [bx, bz], [cx2, cz2]], [3.4, 4.3, [cx2, cz2], [dx2, dz2]], [7.6, 9, [dx2, dz2], [ex, ez]]];
+      let said = false, clank = 0;
+      E.toast('ENTER skips', 2.5);
+      E.cutscene({ dur: 9, step(t, dt) {
+        const leg = legs.find(([t0, t1]) => t >= t0 && t < t1);
+        if (leg) {
+          const [t0, t1, [ax, az], [qx, qz]] = leg, k = sstep(t0, t1, t), nx = lerp(ax, qx, k), nz = lerp(az, qz, k), hl = Math.hypot(qx - ax, qz - az) || 1;
+          G.x = nx; G.z = nz; G.y = E.ground(nx, nz); G.hx = (qx - ax) / hl; G.hz = (qz - az) / hl; G.frame = t0 === 1.6 ? 'gol_crouch' : 'gol_crawl';
+          if (t0 === 1.6 && Math.random() < dt * 30) E.puff(G.x, G.y + 0.5, G.z, 0x5a4020, 1, 2, 0.35, 0.5, 1, 8);
+        } else if (t >= 4.3 && t < 7.6) {                  // winding
+          const [qx, qz] = [wx - dx2, wz - dz2], ql = Math.hypot(qx, qz) || 1; G.hx = qx / ql; G.hz = qz / ql; G.frame = Math.floor(t * 4) % 2 ? 'gol_crouch' : 'gol_idle';
+          drum.rotation.x -= dt * 5; port.position.y = gy + 0.95 + 4.9 * sstep(4.6, 7.3, t);
+          if ((clank -= dt) <= 0 && t < 7.3) { clank = 0.42; E.Sound.clang(); }
+          if (!said && t > 5) { said = true; E.bark('towerman', 'THE MAN IN THE TOWER: HA! HAA! HAAAAA!', 3.5); }
+        }
+        if (Math.abs(t - 1.62) < dt || Math.abs(t - 3.42) < dt) E.Sound.splat();
+        // Camera: from behind the hog as he crawls to the gap; then a cut to the far side, looking back, as he comes through,
+        // so the winding and the gate going up are in plain view with the hog waiting behind the bars.
+        if (t < 1.7) { cam.position.set(cpx, gy + 8, cpz); cam.lookAt(lkx, gy + 1, lkz); }
+        else { cam.position.set(fpx, gy + 7.4 + Math.sin(t * 0.4) * 0.2, fpz); cam.lookAt(flx, gy + 2.2, flz); }
+      }, done() {
+        muck.done = true; tower.on = false; port.position.y = gy + 5.85; for (const c of bars) c.off = true;
+        for (const p of muck.pools) { p.life = 0; p.m.visible = false; }
+        E.pages([13], () => { E.objective('Climb the icy pass', at(END2)); E.toast('Ice: the hog cannot grip. Lean into the wind.', 4); });
+      } });
+    };
     { const [x, z] = at(166); E.trigger(x, z, 10, () => E.pages([10, 11], () => {
       tower.on = true; E.bark('towerman', 'THE MAN IN THE TOWER: "You come me!"', 3.5);
-      E.later(1.0, () => tower.lob(E.GOL.x, E.GOL.z, () => {         // the first bucket is for the Gollum Man. It always is.
-        E.GOL.frame = 'gol_hurt'; E.pages([12], () => { tower.t = 2.2; E.objective('Get past the tower — mind the slop', at(256)); E.bark('gollum_hurt', 'THE GOLLUM MAN: Its contents foul! Its purpose unknown! We is SLICK with it!', 4); });
+      E.later(1.0, () => tower.lob(G.x, G.z, () => {         // the first bucket is for the Gollum Man. It always is.
+        coat(true); E.pages([12], () => {
+          tower.t = 2.4; E.objective(`Slime the Gollum Man  ${pip()}`, gateAt);
+          E.bark('gollum_hurt', 'THE GOLLUM MAN: Its contents foul! Its purpose unknown! …But the gate, Hog Man. A gap beneath it. Slick enough, we slips through. Lead us under his buckets, or sit us in his slop!', 7);
+        });
       }));
     })); }
-    { const [x, z] = at(254); E.trigger(x, z, 7, () => { tower.on = false; E.pages([13], () => { E.objective('Climb the icy pass', at(END2)); E.toast('Ice: the hog cannot grip. Lean into the wind.', 4); }); }); }
+    { const [x, z] = at(GATE2 - 6); E.trigger(x, z, 7, () => { if (muck.n < muck.need) E.toast('Shut fast. When the ring is under you, ride on and let the Gollum Man walk into it, or stop with him sat in a puddle.', 6); }); }
     // The icy pass: a ledge, a drop, and a wind that wants the hog over it.
     const wind = { t: 4, on: 0, warn: 0 };
     E.actor({ step(dt) {
@@ -731,4 +817,4 @@ const LK = {
 // The book's four chapters first (saga.js counts on that), then the side roads, in the order of SIDES in hog-progress.js.
 export const LEVELS = [L1, L2, L3, L4, LF, LM, LV, LK];
 // For test bots and the console: the geometry the chapters are built on.
-export const GEO = { T1, T2, T3, T4, GLADE, POND, FORDS, BANK1, GAPS2, LEDGE2, EDGE2, END2, DOOR3, TAV, COR, THR, ESC, K, S4, RIVER4, spiral, TF, RAFT, ROCKSF, BEAMSF, MB, TV, CHIPSV, LOWV, POOLV, CLIMBV, MK, ROUTEK, AMB: { DAY, DUSK, SNOW, NIGHT, TAVERN, CAVE, BRIGHT, FROST, SUNSET } };
+export const GEO = { T1, T2, T3, T4, GLADE, POND, FORDS, BANK1, GAPS2, LEDGE2, EDGE2, END2, GATE2, DOOR3, TAV, COR, THR, ESC, K, S4, RIVER4, spiral, TF, RAFT, ROCKSF, BEAMSF, MB, TV, CHIPSV, LOWV, POOLV, CLIMBV, MK, ROUTEK, AMB: { DAY, DUSK, SNOW, NIGHT, TAVERN, CAVE, BRIGHT, FROST, SUNSET } };

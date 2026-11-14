@@ -245,7 +245,7 @@ not the pointy-hatted one. The villains are the wizard, the shield-maiden and th
 | Chapter | Book pages | What happens |
 |---|---|---|
 | 1 The Darkling Trail | 4–8 | Town and the wizard's warning; dark wood, fallen trunks, a ford; a bog of stepping stones (the mossy ones sink); a thorn bank climbed by a stair of logs; the Tile Troll at his pond (slams up close, hurls tiles at range); the wizard exiles him |
-| 2 The Cold Mountain | 9–16 | Snowballs down the valley; the bent tower and the slop bucket (the first always hits the Gollum Man); the icy pass (ice, wind, two chasms); a knife-edge with a drop on both sides and a third chasm; a last gully of snowballs; the shield-maiden takes the Gollum Man |
+| 2 The Cold Mountain | 9–16 | Snowballs down the valley; the bent tower: a portcullis bars the pass until the Gollum Man is slimed three times with the tower man's slop, then he squeezes under and winds it up; the icy pass (ice, wind, two chasms); a knife-edge with a drop on both sides and a third chasm; a last gully of snowballs; the shield-maiden takes the Gollum Man |
 | 3 The Oasis | 17–27 | Alone at night; the tavern (sing "I said maybe" to the barkeep three times for a row of ales); the small square door; candlelit corridor (narrow pillars, pillars, a drifting span, sinking stones); the shield-maiden in her lair; then the Gollum Man climbs up behind the rider and they dash out along a tunnel of sinking stones |
 | 4 The White Castle | 28–47 | A snowfield and a frozen river crossed on drifting floes; the WANTED parchment; the endless spiral and its barrels; the Lamp and the feast; the three villains in turn; catch the Gollum Man at the window; a scripted scene of Juli's wings growing and the leap from the window; a flight through sixteen rings |
 
@@ -355,6 +355,28 @@ work like Mario 64's castle). `HUB` (the `?hub` query) switches `hog3d.js` from 
   the prologue; CONTINUE goes to the hub; H on a chapter's pause screen goes back to the hub.
 - **Testing:** set `localStorage['hogSaga.progress']` by hand, then open `hog3d.html?hub&from=n`.
   `HOG.DOORS`, `HOG.prog` are exposed. `SAGA.E.complete()` finishes the current chapter.
+
+### The man in the tower (chapter 2)
+
+The user asked that the Gollum Man be covered in muck before the hog can go on. A wall and
+portcullis (`GATE2`) cross the pass past the bent tower; the hog cannot pass, jump or boost over it.
+
+- **Three coats of slop** open it. The first bucket always lands on him (as in the book, page 12).
+  After that a coat comes from a bucket that lands on him **and misses the hog**, or from him
+  **sitting a full second** in the puddle a bucket leaves. The intended trick: when the target
+  ring is under the hog, ride a few steps on so the Gollum Man trails into it.
+- **Why those rules:** with "any bucket that touches him" or "walking through a puddle", a bot
+  that just rode up to the gate and waited got him slimed three times without trying (he trails
+  the hog through every dodge, and buckets that hit the hog often hit him too).
+- **Then a scene** (`gateScene`, ENTER skips): he crawls to the gap, squeezes under, and winds
+  the winch while the tower man laughs. The camera cuts to the far side looking back; from the
+  near side, the wall hides the winch at any height.
+- **He stays mucky** for the rest of the chapter: `E.muck(k)` in `saga.js` tints his materials
+  toward brown (reset when a chapter loads), and he drips. The shadow's line "the small, damp
+  one" now fits.
+- The thrower takes `o.splash(x, y, z)`, called wherever a bucket lands that has no `onLand` of
+  its own. `L2.muck`, `L2.tower`, `L2.gateScene` are left on the level for test bots. Buckets are
+  pooled, so a bot must tell throws apart by their target, not by object.
 
 ### Music — `hog-music.js`
 

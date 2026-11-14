@@ -5,7 +5,7 @@
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=6';
-import { LEVELS } from './saga-levels.js?v=4';
+import { LEVELS } from './saga-levels.js?v=5';
 import * as Progress from './hog-progress.js?v=2';
 import { makePlayer } from './hog-music.js?v=1';
 const MAIN = LEVELS.filter(l => !l.side).length;       // the book's chapters come first in LEVELS; the side roads follow
@@ -342,7 +342,7 @@ function loadLevel(i) {
   Object.assign(world, { items: [], crows: [], npcs: [], flags: [], triggers: [], tick: [], draw: [], rings: [], sauce: [], foodGot: 0, foodTotal: 0, target: null, relic: null, finishing: false, windX: 0, windZ: 0, killY: -22, index: i });
   const L = world.level = LEVELS[i];
   buildGround(L); setAmbience(L.ambience, true);
-  GOL.on = false; GOL.mode = 'follow'; GOL.cower = false; mountGollum(false); nearNpc = null;
+  GOL.on = false; GOL.mode = 'follow'; GOL.cower = false; mountGollum(false); nearNpc = null; if (GOL.muck) muckGollum(0);
   L.build(E);
   const [sx, sz, dx, dz] = L.start; P.x = sx; P.z = sz; P.y = groundBelow(sx, sz, 999); P.vx = P.vy = P.vz = 0; P.dirX = dx; P.dirZ = dz; P.hp = P.maxHp; P.fuel = Math.max(P.fuel, 0.45); P.dead = 0; P.inv = 0; P.charge = 0; P.frozen = false;
   checkpoint = { x: P.x, y: P.y, z: P.z }; lastSafe = { ...checkpoint }; liveSafe = false; P.gy = P.y;
@@ -514,6 +514,16 @@ function stepGollum(dt) {
   }
 }
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+// Slop on the Gollum Man (chapter 2): k from 0, clean, to 1, slathered. Each of his meshes gets a material of its own the first time.
+const MUCK = new THREE.Color(0x5a4020);
+function muckGollum(k) {
+  GOL.m.g.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    if (!o.userData.clean) { o.material = o.material.clone(); o.userData.clean = o.material.color.clone(); }
+    o.material.color.copy(o.userData.clean).lerp(MUCK, k * 0.72);
+  });
+  GOL.muck = k;
+}
 function drawGollum(dt) {
   const G = GOL; G.m.g.visible = G.on; G.shadow.visible = G.on && !G.riding; leash.visible = G.on && G.mode === 'follow' && !G.riding;
   if (!G.on) return;
@@ -719,7 +729,11 @@ function spawnThrower(o) {
     A.inv = Math.max(0, A.inv - dt); A.poseT -= dt; if (A.poseT <= 0) A.pose = A.on ? 'shout' : 'idle';
     for (const s of A.shots) if (s.life > 0) {
       s.life -= dt; const k = 1 - s.life / s.dur; s.m.position.set(lerp(s.sx, s.tx, k), lerp(s.sy, s.ty, k) + 9 * k * (1 - k), lerp(s.sz, s.tz, k)); s.m.rotation.x += 7 * dt; s.ring.scale.setScalar(1.25 - k * 0.25);
-      if (s.life <= 0) { s.m.visible = s.ring.visible = false; Sound.splat(); puff(s.tx, s.ty + 0.4, s.tz, 0x7a6a2a, 14, 6, 0.6, 0.6, 4, 12); if (s.onLand) s.onLand(); else if (Math.hypot(P.x - s.tx, P.z - s.tz) < 2.7 && P.y - s.ty < 2.5) hurt(1, P.x - s.tx, P.z - s.tz); }
+      if (s.life <= 0) {
+        s.m.visible = s.ring.visible = false; Sound.splat(); puff(s.tx, s.ty + 0.4, s.tz, 0x7a6a2a, 14, 6, 0.6, 0.6, 4, 12);
+        if (s.onLand) s.onLand();
+        else { if (o.splash) o.splash(s.tx, s.ty, s.tz); if (Math.hypot(P.x - s.tx, P.z - s.tz) < 2.7 && P.y - s.ty < 2.5) hurt(1, P.x - s.tx, P.z - s.tz); }   // o.splash: where it landed, for whatever the chapter makes of it
+      }
     }
     if (!A.on || P.dead > 0) return;
     A.yaw = Math.atan2(P.x - A.x, P.z - A.z);
@@ -989,7 +1003,8 @@ const E = {
   line(type, x0, z0, x1, z1, n) { for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : i / (n - 1); addItem(type, lerp(x0, x1, t), lerp(z0, z1, t)); } },
   ring(o) { world.rings.push(o); return o; },
   light(x, y, z, colour = 0xffb060, strength = 60, reach = 40) { const l = new THREE.PointLight(colour, strength, reach, 1.6); l.position.set(x, y, z); world.g.add(l); return l; },
-  music(n) { Sound.tune(n); },                              // change the tune part-way through a chapter
+  music(n) { Sound.tune(n); },
+  muck: muckGollum,                              // change the tune part-way through a chapter
   say, pages, bark, toast, objective: setObjective, ambience: setAmbience, hurt, complete: completeLevel, relic: awardRelic,
   troll: spawnTroll, maiden: spawnMaiden, thrower: spawnThrower, caster: spawnCaster, rollers: spawnRollers, actor, flight: startFlight,
   // indoors: look down over the walls rather than be squeezed against them
