@@ -246,6 +246,7 @@ let checkpoint = { x: 0, y: 0, z: 166 }, lastSafe = { x: 0, y: 0, z: 166 };
 const items = [], crows = [], npcs = [], flags = [], parts = [], mills = [], clouds = [], boulders = [];
 let hog, ringModel, playerShadow, sky, sea, ferry, heart = null, leash;
 const ropes = [], cine = { t: 0, dur: 0, step: null, done: null };
+const air = { fly: false, wing: 0, pitch: 0, ride: false };          // the hog on the wing, and the Gollum Man up behind (the arrival from the White Castle)
 const intro = { t: 0, dur: 6 };
 const GOL = { x: 0, y: 0, z: 0, state: 'perch', perch: 0, t: 0, hits: 0, vx: 0, vy: 0, vz: 0, face: 1, inv: 0, barked: false, lungeT: 4, spr: null, shadow: null, frame: 'gol_idle', dirX: 0, dirZ: 0, met: false };
 const PERCHES = [{ x: -70, z: 124.5 }, { x: LAKE.x + 4.5, z: LAKE.z + 3.5 }, { x: 77, z: 4.5 }];
@@ -1196,12 +1197,50 @@ function startHub() {
   tell('oldman', [['There is a hatch on my deck I have never once got open. Forty years I have stamped on it.'], ['Mind the sails on the south side, lad. Time your jump. They have flattened better knights than you.'], ['Some fool with a lance called her a giant once. She has never forgiven it.']]);
   tell('other', [['That door by the cart froze solid the night it appeared. The Oasis, the board says. In this weather.'], ['Crossing the lake? Mind the mossy stones, friend. They sink.'], ['Folk say I look like the miller up the hill. I do not see it myself.']]);
   hubObjective(); updateHUD(); history.replaceState(null, '', 'hog3d.html?hub');          // a reload should not replay the fanfare
+  if (QS.has('flew') && d) arrive(() => welcome(d, from)); else welcome(d, from);
+}
+// What the hub says on arrival: a golden food's fanfare the first time a chapter is finished, or just where you are.
+function welcome(d, from) {
   if (QS.has('new') && d) {
     const R = Progress.RELICS[from - 1], next = hubNext();
     prize = { m: Models.buildRelic(R.id), t: 10, say: 'THE GOLLUM MAN: ' + (next ? next.how : 'The Lamp is fed and so is it. We could goes home now. We has no home. We stays with the piggy-man.') };
     scene.add(prize.m); Sound.win(); toast(`${R.name}! ${R.power}`, 4.6); if (next) next.nag = time + 20;
   } else if (d && d.side) toast(`${d.title}: hot sauce ${Progress.sauceIn(prog, d.side)} of ${Progress.BOTTLES}`, 4);
   else toast('THE WINDMILL COUNTRY', 3);
+}
+// Back from the White Castle, which ends in flight: they come in over the plain from the west on Juli's wings and land
+// on the Great Windmill's deck, where the hatch to that chapter is. The Gollum Man rides up behind and hops down after.
+// The camera stands off the deck to the south-west: clear of the cap, above the sails' reach, and not looking through
+// the Food of the Lamp that floats over the hatch. ENTER skips.
+function arrive(then) {
+  const L = { x: P.x, y: P.y, z: P.z }, A = { x: L.x - 62, y: L.y + 30, z: L.z + 2 }, C = { x: L.x - 20, y: L.y + 9, z: L.z + 1 }, fx = P.dirX, fz = P.dirZ;
+  const bez = (a, b, c, k) => (1 - k) * (1 - k) * a + 2 * (1 - k) * k * b + k * k * c, camAt = { x: MILL.x - 20, z: MILL.z + 12 };
+  air.fly = true; air.wing = 1; air.ride = true; leash.visible = false;
+  hog.pillion.add(GOL.m.g); GOL.m.g.position.set(0, -0.95, 0.14); GOL.m.g.rotation.set(0, 0, 0); GOL.m.yaw = 0;
+  let hopped = false, landed = false;
+  startCine({ dur: 7.2, step(t) {
+    const k = sstep(0, 5.0, t), x = bez(A.x, C.x, L.x, k), y = bez(A.y, C.y, L.y, k), z = bez(A.z, C.z, L.z, k), k2 = Math.min(1, k + 0.02);
+    const tx = bez(A.x, C.x, L.x, k2) - x, tz = bez(A.z, C.z, L.z, k2) - z, tl = Math.hypot(tx, tz);
+    P.x = x; P.y = y; P.z = z; P.vx = P.vz = 0; P.vy = 0; P.grounded = t > 5;
+    if (t < 5 && tl > 1e-4) { P.dirX = tx / tl; P.dirZ = tz / tl; } else { P.dirX = lerp(P.dirX, fx, 0.06); P.dirZ = lerp(P.dirZ, fz, 0.06); }
+    air.fly = t < 5.0; air.wing = 1 - sstep(5.4, 6.4, t); air.pitch = t < 4.3 ? -0.12 : t < 5 ? 0.22 * sstep(4.3, 4.9, t) : 0.22 * (1 - sstep(5, 5.4, t));
+    if (!landed && t >= 5) { landed = true; Sound.land(); cam.shake = 0.25; puff(P.x, P.y + 0.2, P.z, 0xe6dcc0, 10, 4, 0.6, 0.5, 1); }
+    if (!hopped && t >= 5.9) {
+      hopped = true; air.ride = false; scene.add(GOL.m.g); GOL.m.g.rotation.set(0, 0, 0);
+      GOL.x = P.x - P.dirX * 2.6 + P.dirZ * 1.2; GOL.z = P.z - P.dirZ * 2.6 - P.dirX * 1.2; GOL.y = P.y; GOL.hx = P.dirX; GOL.hz = P.dirZ; GOL.frame = 'gol_jump';
+      puff(GOL.x, GOL.y + 0.4, GOL.z, 0xe6dcc0, 6, 3, 0.5, 0.4, 1); Sound.gollum();
+    }
+    if (t > 6.2) GOL.frame = 'gol_idle';
+    if (t > 1.2 && t < 1.25) Sound.whoosh();
+    const near = sstep(4.4, 6.6, t);
+    // The close-up comes in from the west, off the deck: from the north it looked through the Food of the Lamp over the hatch.
+    camera.position.set(lerp(camAt.x, P.x - 7.5, near), MILL.deckY + lerp(6, 4, near), lerp(camAt.z, P.z + 1.5, near)); camera.lookAt(P.x, P.y + 1.8, P.z);
+  }, done() {
+    state = 'play'; $('hud').classList.remove('cine'); document.body.classList.remove('cine');          // stepCine leaves it 'done', for the prologue's exit
+    air.fly = false; air.wing = 0; air.pitch = 0; leash.visible = true; P.dirX = fx; P.dirZ = fz; P.y = L.y; P.grounded = true;
+    if (air.ride) { air.ride = false; scene.add(GOL.m.g); GOL.x = P.x - fx * 3; GOL.z = P.z - fz * 3; GOL.y = P.y; }
+    cam.yaw = Math.atan2(-fx, -fz); cam.tgt.set(P.x, P.y + 2.4, P.z); then();
+  } });
 }
 let prize = null;
 function drawHub(dt) {
@@ -1306,8 +1345,8 @@ canvas.addEventListener('wheel', e => { cam.dist = clamp(cam.dist + Math.sign(e.
 function updateVisuals(dt) {
   // Hogman.
   Models.animHogman(hog, { dirX: P.dirX, dirZ: P.dirZ, moving: Math.hypot(P.vx, P.vz) > 1.5, grounded: P.grounded, vy: P.vy, charge: P.charge > 0, boost: P.boostT,
-    dead: P.dead > 0, anim: P.anim, time, squash: P.squash }, dt);
-  hog.g.position.set(P.x, P.y + hog.lift, P.z);
+    dead: P.dead > 0, anim: P.anim, time, squash: P.squash, fly: air.fly, wing: air.wing }, dt);
+  hog.g.position.set(P.x, P.y + hog.lift, P.z); hog.g.rotation.x = air.pitch;
   hog.g.visible = state === 'title' ? false : !(P.inv > 0 && P.dead <= 0 && Math.floor(time * 14) % 2);
   placeShadow(playerShadow, P.x, P.y, P.z); playerShadow.visible = state !== 'title';
 
@@ -1321,10 +1360,10 @@ function updateVisuals(dt) {
   T.m.g.position.set(T.x, ty, T.z); T.m.g.visible = !HUB && !(T.inv > 0 && T.state !== 'dead' && Math.floor(time * 16) % 2); T.shadow.position.set(T.x, ty + 0.07, T.z); T.shadow.visible = !HUB;
   // Gollum Man.
   const G = GOL;
-  Models.animGollum(G.m, { frame: G.frame, dirX: G.hx, dirZ: G.hz, time, shake: G.state === 'windup' }, dt);
-  G.m.g.position.set(G.x, G.y, G.z);
+  if (air.ride) Models.animGollum(G.m, { frame: 'gol_ride', dirX: 0, dirZ: 1, time, shake: false }, dt);
+  else { Models.animGollum(G.m, { frame: G.frame, dirX: G.hx, dirZ: G.hz, time, shake: G.state === 'windup' }, dt); G.m.g.position.set(G.x, G.y, G.z); }
   G.m.g.visible = !(G.inv > 0 && G.state !== 'hurt' && G.state !== 'escape' && Math.floor(time * 14) % 2); placeShadow(G.shadow, G.x, G.y, G.z);
-  G.shadow.visible = G.state !== 'leap' && G.state !== 'escape';
+  G.shadow.visible = G.state !== 'leap' && G.state !== 'escape' && !air.ride;
   for (const n of npcs) Models.animNpc(n.m, { time, yaw: Math.hypot(P.x - n.x, P.z - n.z) < 22 ? Math.atan2(P.x - n.x, P.z - n.z) : n.yaw0, talking: state === 'dialog' && nearNpc === n }, dt);
   // The Ring: over his head, then loose, then held aloft.
   G.m.head.getWorldPosition(tmpV);

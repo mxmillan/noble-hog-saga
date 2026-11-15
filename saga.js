@@ -5,7 +5,7 @@
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=6';
-import { LEVELS } from './saga-levels.js?v=5';
+import { LEVELS } from './saga-levels.js?v=6';
 import * as Progress from './hog-progress.js?v=2';
 import { makePlayer } from './hog-music.js?v=1';
 const MAIN = LEVELS.filter(l => !l.side).length;       // the book's chapters come first in LEVELS; the side roads follow
@@ -924,9 +924,9 @@ function frame(dt) {
   } else if (state === 'pages') { time += dt; if (HIT.Enter || HIT.Space || HIT.KeyE) turnPage(false); else if (HIT.Escape) turnPage(true); if (state !== 'pages') updateCamera(dt);
   } else if (state === 'fly') { time += dt; stepFlight(dt);
   } else if (state === 'cine') { time += dt; stepCine(dt, HIT.Enter || HIT.Escape);
-  } else if (state === 'title' || state === 'end') {
+  } else if (state === 'title') {
     time += dt; cam.yaw += dt * 0.1; cam.pitch = 0.3; cam.cur = cam.dist = 34; const [sx, sz] = world.level.start; cam.tgt.set(sx, groundBelow(sx, sz, 999) + 6, sz - 20); updateCamera(dt, false);
-    if (state === 'title' && (HIT.Enter || HIT.Space)) { if (Progress.load().pro) toHub(); else startPrologue(); }
+    if (HIT.Enter || HIT.Space) { if (Progress.load().pro) toHub(); else startPrologue(); }
   }
   updateVisuals(dt);
   renderer.render(scene, camera);
@@ -991,12 +991,8 @@ function finishLevel() {
   }
   const fresh = pr.done < i + 1, back = `&from=${i + 1}${fresh ? '&new' : ''}`;
   pr.pro = true; pr.done = Math.max(pr.done, i + 1); Progress.save(pr); Sound.win();
-  if (i + 1 < MAIN) return toHub(back, 900);
-  fadeThen(() => { state = 'end'; $('hud').hidden = true; Sound.tune('windmill');
-    const m = Math.floor(playTime / 60), s = Math.floor(playTime % 60);
-    $('end-stats').innerHTML = `The Food of the Lamp is yours.<br>Time ${m}:${String(s).padStart(2, '0')}<br>Morsels eaten ${foodAll}<br>Tumbles ${deaths}` + (fly.rings.length ? `<br>Rings ${fly.got}/${fly.rings.length}` : '');
-    $('again').onclick = () => toHub(back);
-    hog.g.rotation.set(0, 0, 0); loadLevel(0); $('end').hidden = false; }, 900);
+  // The last chapter ends in flight: 'flew' has the hub bring them down onto the Great Windmill.
+  toHub(back + (i + 1 === MAIN ? '&flew' : ''), 900);
 }
 
 // What a chapter is handed to build itself with.
@@ -1022,6 +1018,7 @@ const E = {
   flash(colour = '#fff', ms = 500) { const f = $('fade'); f.style.transition = 'none'; f.style.background = colour; f.style.opacity = 1; setTimeout(() => { f.style.transition = `opacity ${ms}ms`; f.style.opacity = 0; setTimeout(() => { f.style.background = '#000'; f.style.transition = ''; }, ms + 60); }, 60); },
   later(secs, fn) { const a = { t: secs, step(dt) { if (a.t > 0 && (a.t -= dt) <= 0) fn(); }, draw() {} }; world.tick.push(a); return a; },
   get time() { return time; }, get state() { return state; },
+  get flyer() { return fly; },                              // where the flight left him, for the scene that follows it
 };
 
 async function boot() {

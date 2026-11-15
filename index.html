@@ -80,8 +80,6 @@
     #card.show { animation:card 4.2s ease-out forwards; }
     @keyframes card { 0% { opacity:0; transform:translate(-50%,-40%); } 12%, 75% { opacity:1; transform:translate(-50%,-50%); } 100% { opacity:0; } }
     #hud.flying #hud-tl, #hud.flying #hud-tr, #hud.flying #compass { visibility:hidden; }
-    #end { background:#000b; flex-direction:column; text-align:center; gap:10px; }
-    #end .stats { font-size:clamp(10px,1.3vw,14px); line-height:2.2; margin-bottom:18px; color:#ffe9a8; text-shadow:2px 2px 0 #000; }
     .go.quiet { animation:none; background:#e8d49a; font-size:clamp(8px,1vw,11px); padding:10px 12px; text-decoration:none; margin-top:14px; }
     .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
     @media (max-width:820px) { #title img.cover { display:none; } }
@@ -158,14 +156,7 @@
 
   <div id="card"><small></small><b></b></div>
 
-  <div id="end" class="screen" hidden>
-    <h1>And so ends Part the First</h1>
-    <h2>The winds of fate still whisper… for a hog's work is never done.</h2>
-    <div class="stats" id="end-stats"></div>
-    <button id="again" class="go">BACK TO THE WINDMILL COUNTRY</button>
-  </div>
-
   <div id="fade"></div>
-  <script type="module" src="saga.js?v=7"></script>
+  <script type="module" src="saga.js?v=8"></script>
 </body>
 </html>

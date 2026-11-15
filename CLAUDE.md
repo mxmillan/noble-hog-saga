@@ -344,7 +344,18 @@ work like Mario 64's castle). `HUB` (the `?hub` query) switches `hog3d.js` from 
   from `from` (where the keeper fell) to the hog, then `finishLevel` saves and returns to
   `hog3d.html?hub&from=n&new`. `from` picks the door to arrive at; `new` plays the fanfare. Chapter
   3's food is given at the maiden's fall (`E.relic`), and the chapter still ends at the tunnel.
-  Chapter 4 has no award scene (the camera is wherever the flight left it); its end screen says so.
+  Chapter 4 ends differently (the user asked for a cutscene after the rings and a return to the hub,
+  in place of the old "And so ends Part the First" stats screen, which is gone): the flight's
+  `done` runs `homeward` in `saga-levels.js`, a 13 s scene in which the Food of the Lamp comes down
+  to the hog, the camera swings to the book's side-on picture and holds as they fly into the sun;
+  then pages 46–47, then `hog3d.html?hub&from=4&new&flew`. `flew` makes the hub run `arrive()`:
+  they glide in from the west on Juli's wings, land on the Great Windmill's deck, and the Gollum
+  Man (on `hog.pillion` for the flight in) hops down; then the usual fanfare. The arrival camera
+  starts south-west of the deck: from the north it looks through the Food of the Lamp floating over
+  the hatch. `E.flyer` gives the scene where the flight left off.
+- **Testing the flight end:** use `?level=4&dev`, `SAGA.LEVELS[3].wing()`, then `N` ends the flight.
+  Watch it in real time: a scene skipped through with `SAGA.skip()` in a page whose frame loop is
+  stopped leaves the take-off's white flash on screen (its fade-out runs on timers).
 - **Arriving from a door**, the hog is put `out` units in front of it (19 by default) so the
   camera behind him is not inside the arch or the gate wall. The hamlet door uses 14: at 19 he
   landed on top of the well.

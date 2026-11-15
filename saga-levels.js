@@ -512,6 +512,31 @@ const L4 = {
       }, draw() {} });
     });
     // "No longer a simple hog, she had become a swine of glory."
+    // After the last ring: on into the sunset. The Food of the Lamp comes down out of the sky to hang over him, the camera
+    // swings round to the book's picture of them side-on (page 46), then holds while they fly away into the sun. Then the
+    // last two pages, and back to the windmill country (the hub lands them on the Great Windmill: see 'flew' in hog3d.js).
+    const homeward = (got, n) => {
+      const F = E.flyer, h = F.yaw, dx = Math.sin(h), dz = Math.cos(h), sx = dz, sz = -dx, S = { x: F.x, y: F.y, z: F.z }, cam = E.camera;
+      const lamp = Models.buildRelic('lamp'); E.world.g.add(lamp);
+      const L0 = { x: S.x + dx * 150, y: S.y + 40, z: S.z + dz * 150 }, hold = new THREE.Vector3();
+      let s1 = false, s2 = false, s3 = false;
+      P.dirX = dx; P.dirZ = dz;
+      E.cutscene({ dur: 13, step(t, dt, c) {
+        c.fly = true; c.wing = 1; c.pitch = -0.08 - 0.1 * Math.sin(t * 0.9);
+        const d = 24 * t - 2.2 * t * t / 2 * sstep(0, 13, t);                     // easing off a little as the scene goes on
+        P.x = S.x + dx * d; P.z = S.z + dz * d; P.y = S.y + 9 * sstep(0, 13, t) + Math.sin(t * 1.3) * 0.6;
+        const k = sstep(1.0, 5.4, t), lx = lerp(L0.x + dx * 24 * t, P.x, k), ly = lerp(L0.y, P.y + 5.6, k) + Math.sin(k * Math.PI) * 6, lz = lerp(L0.z + dz * 24 * t, P.z, k);
+        lamp.position.set(lx, ly + Math.sin(t * 3) * 0.15, lz); lamp.rotation.y = t * 2.4;
+        if (k > 0.05 && Math.random() < dt * 18) E.puff(lx + (Math.random() - 0.5) * 2, ly + (Math.random() - 0.5) * 1.5, lz + (Math.random() - 0.5) * 2, 0xffe27a, 1, 0.6, 0.3, 0.6, 1);
+        if (!s1 && t > 0.4) { s1 = true; E.toast(`Rings: ${got} of ${n}`, 3); }
+        if (!s2 && t > 5.4) { s2 = true; E.Sound.win(); E.flash('#fff0c8', 700); E.toast('The Food of the Lamp! The quest is done.', 4.5); }
+        if (!s3 && t > 9.6) { s3 = true; E.Sound.gust(); }
+        // Camera: chasing from behind and above; round to the side for the book's picture; then it stops and they fly on.
+        const behind = new THREE.Vector3(P.x - dx * 15, P.y + 5, P.z - dz * 15), side = new THREE.Vector3(P.x + sx * 13 + dx * 3, P.y + 1.5, P.z + sz * 13 + dz * 3);
+        if (t < 9.4) hold.copy(behind).lerp(side, sstep(4.2, 7.2, t));
+        cam.position.copy(hold); cam.lookAt(P.x + dx * 4 * (1 - sstep(4.2, 7.2, t)), P.y + 2, P.z + dz * 4 * (1 - sstep(4.2, 7.2, t)));
+      }, done: () => E.pages([46, 47], () => E.complete()) });
+    };
     const takeWing = () => {
       E.ambience(SUNSET, true); E.music('flight'); E.gollum(true, { mode: 'ride' });
       const rings = []; for (let i = 0; i < 16; i++) rings.push([Math.sin(i * 0.85) * 34, top + 16 + Math.sin(i * 0.6 + 1) * 13, K.z - 160 - i * 58]);
@@ -535,7 +560,7 @@ const L4 = {
         const c1 = V(hx + Math.sin(a) * 6.5, hy + 1.4, hz + Math.cos(a) * 6.5), c2 = V(K.x + 13, top + 4, K.z - 10.5), c3 = V(K.x - 6.5, top + 2.6, K.z - 6), c4 = V(hx + 16 * (1 - sstep(8.4, 11.5, t)), hy + 3, hz + 15);
         const p = c1.lerp(c2, sstep(4.4, 5.2, t)).lerp(c3, sstep(6.0, 6.7, t)).lerp(c4, sstep(7.6, 9.2, t));
         cam.position.copy(p); cam.lookAt(hx, hy, hz - 6 * sstep(9, 11.5, t));
-      }, done: () => { E.flight({ x: P.x, y: P.y, z: P.z, rings, done: () => E.pages([46, 47], () => E.complete()) }); } });
+      }, done: () => { E.flight({ x: P.x, y: P.y, z: P.z, rings, done: homeward }); } });
     };
     { const [x, z] = spiral(0.985); E.trigger(x, z, 5, () => { hall = true; E.pages([33, 34], () => E.objective('Approach the sacred table', [K.x, tblZ + 4])); }, { y: top }); E.flag(K.x, K.z + 11, -4); }
     E.trigger(K.x, tblZ + 4.5, 4.2, () => { hall = true; E.pages([35, 36, 37, 38], () => { P.hp = P.maxHp; P.fuel = 1; E.Sound.heal(); E.toast('Conquest is crowned in cheddar and grease.', 3.5); E.later(2.6, () => E.pages([39], () => { arena.on = true; E.music('boss'); towerWave(); })); }); }, { y: top });
