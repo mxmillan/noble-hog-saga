@@ -159,10 +159,105 @@ const L1 = {
     for (let i = 0; i < 14; i++) { const a = i / 14 * TAU + 0.2; if (Math.abs(a - Math.PI / 2) < 0.45) continue; const m = Models.buildPine(false, r); m.scale.setScalar(1.3 + r() * 0.6); E.put(m, GLADE.x + Math.cos(a) * (GLADE.r + 3), GLADE.z + Math.sin(a) * (GLADE.r + 3), r() * 6, 0.4); }
     const troll = E.troll({ x: -5, z: GLADE.z - 1, hx: GLADE.x + 3, hz: GLADE.z, yaw: Math.atan2(-9, -5),
       onHit: T => E.objective(`Fell the Tile Troll  ${pips(T.hp, 3)}`),
-      onDefeat: T => E.later(1.4, () => {                 // "With a burst of light he cast the Tile Troll into exile."
-        E.flash('#fff', 1100); E.music('trail'); T.state = 'gone'; E.puff(T.x, T.y + 3, T.z, 0xffe9a0, 30, 12, 1.2, 1.2, 5); E.Sound.bolt(); E.GOL.cower = false;
-        E.pages([8], () => E.say([['wizard', 'The Wizard', 'Exile! Staff blazing, pint untouched. Onward, hog-rider — the cold mountain will not climb itself.'], ['gollum', 'The Gollum Man', 'It is gone! The square-man is gone! We wept. We is not ashamed.']], () => E.complete([T.x, T.y + 3, T.z])));
-      }) });
+      stagger: true, onDefeat: T => E.later(0.5, () => exile(T)) });
+    // Page 8: "The wizard returned in radiant splendour, staff blazing, pint untouched. With a burst of light he cast the Tile
+    // Troll into exile." So the last charge leaves the troll reeling, and the wizard comes to finish him: he steps out of a
+    // flash of light at the glade's mouth, strides in, raises the staff, and a bolt takes the troll away. Then page 8.
+    const wizCtl = { held: false };                // true while a scene is moving the glade's wizard itself
+    // "The Hog Man whooped with glee": he rears, and Juli bolts — the wrong way, straight into the pond, with the Gollum Man
+    // flying on the end of the leash. The wizard points the other way. They splash out, do a lap of him (he turns on the spot
+    // to watch, and is left dizzy) and are off up the trail. Alone at last, he takes a sip of the pint. Then the hub.
+    const rideOff = (W, S) => {
+      const { P, GOL: G } = E, cam = E.camera, P0 = { x: P.x, z: P.z }, Q = { x: POND.x + 2, z: POND.z }, N = { x: 0, z: GLADE.z - 42 };
+      const qd = Math.hypot(Q.x - P0.x, Q.z - P0.z), qx = (Q.x - P0.x) / qd, qz = (Q.z - P0.z) / qd, R = 3.6;
+      // The way out: from the pond to the wizard, once round him, and away north up the trail.
+      const a0 = Math.atan2(Q.z - S.z, Q.x - S.x), lap = [Q]; for (let i = 0; i <= 14; i++) { const a = a0 + i / 14 * Math.PI * 2; lap.push({ x: S.x + Math.cos(a) * R, z: S.z + Math.sin(a) * R }); }
+      lap.push({ x: 0.5, z: GLADE.z - 18 }, N);
+      const lens = [0]; for (let i = 1; i < lap.length; i++) lens.push(lens[i - 1] + Math.hypot(lap[i].x - lap[i - 1].x, lap[i].z - lap[i - 1].z));
+      const along = d => { let i = 1; while (i < lap.length - 1 && lens[i] < d) i++; const k = clamp((d - lens[i - 1]) / (lens[i] - lens[i - 1]), 0, 1); return [lerp(lap[i - 1].x, lap[i].x, k), lerp(lap[i - 1].z, lap[i].z, k), lap[i].x - lap[i - 1].x, lap[i].z - lap[i - 1].z]; };
+      const OUT = 5.4, SPEED = 17, tEnd = OUT + lens[lens.length - 1] / SPEED, cues = {}, once = (k, t, at) => { if (!cues[k] && t >= at) { cues[k] = true; return true; } return false; };
+      wizCtl.held = true; E.music('town');
+      E.cutscene({ dur: tEnd + 3.4, step(t, dt, c) {
+        let hx, hz, dx = qx, dz = qz, run = false, flying = false;
+        if (t < 1.3) {                                         // the whoop: he rears up
+          // (the hog's pitch turns about the world's x axis, so she faces straight up the glade to rear: then it reads as a rear)
+          hx = P0.x; hz = P0.z; dx = 0; dz = -1; c.pitch = 0.8 * Math.sin(Math.min(1, t / 1.1) * Math.PI);
+          G.frame = 'gol_jump'; G.y = E.ground(G.x, G.z) + Math.abs(Math.sin(t * 9)) * 0.9;
+        } else if (t < 2.9) {                                  // the bolt, the wrong way
+          const k = sstep(1.3, 2.9, t); hx = lerp(P0.x, Q.x, k); hz = lerp(P0.z, Q.z, k); c.pitch = 0; run = true; flying = true;
+        } else if (t < OUT) {                                  // in the pond
+          hx = Q.x; hz = Q.z; c.pitch = 0;
+          if (t > 3.6) { const wx = N.x - S.x, wz = N.z - S.z; W.yaw = Math.atan2(wx, wz); }
+        } else if (t < tEnd) {                                 // out, a lap of the wizard, and away
+          let ddx, ddz; [hx, hz, ddx, ddz] = along((t - OUT) * SPEED); const l = Math.hypot(ddx, ddz) || 1; dx = ddx / l; dz = ddz / l; run = true; flying = true; c.pitch = 0;
+        } else { const [nx, nz] = along(1e9); hx = nx; hz = nz; }
+        P.x = hx; P.z = hz; P.y = E.ground(hx, hz) + (t < 1.3 ? 0.5 * Math.sin(Math.min(1, t / 1.1) * Math.PI) : 0); P.dirX = dx; P.dirZ = dz; c.run = run;
+        if (flying) {                                          // yanked off his feet, flying on the end of the leash
+          G.x = P.x - dx * 4.6 + Math.sin(t * 7) * 0.6 * dz; G.z = P.z - dz * 4.6 - Math.sin(t * 7) * 0.6 * dx; G.y = P.y + 1.5 + Math.sin(t * 13) * 0.45; G.hx = dx; G.hz = dz; G.frame = 'gol_hurt';
+          if (Math.random() < dt * 25) E.puff(P.x - dx * 1.4, P.y + 0.3, P.z - dz * 1.4, 0xd8c8a0, 1, 2, 0.7, 0.5, 1);
+        } else if (t >= 2.9 && t < OUT) { G.x = Q.x - qx * 4.2 + qz * 1.2; G.z = Q.z - qz * 4.2 - qx * 1.2; G.y = E.ground(G.x, G.z) + 0.9; G.frame = 'gol_crouch'; }
+        if (once('whoop', t, 0.15)) { E.toast('THE HOG MAN: Whoo-HOOO!', 1.8); E.Sound.charge(); }
+        if (once('bolt', t, 1.3)) E.Sound.whoosh();
+        if (once('splash', t, 2.9)) { E.Sound.splash(); E.puff(Q.x, 5.8, Q.z, 0xcfeaff, 30, 9, 0.8, 0.9, 6, 14); }
+        if (once('plop', t, 3.05)) { E.Sound.splash(); E.puff(G.x, 5.8, G.z, 0xcfeaff, 16, 6, 0.6, 0.7, 4, 14); E.toast('THE GOLLUM MAN: Wrong way, Hog Man. WET way.', 2.4); }
+        if (once('point', t, 3.7)) E.toast('THE WIZARD: The mountain, hog-rider, is THAT way.', 2.2);
+        if (once('off', t, OUT + 1.2)) E.toast('THE HOG MAN: Onward, Juli!', 2);
+        // The wizard: points them the right way; turns on the spot to watch them go round him; is left dizzy; sips.
+        Models.animNpc(W, { yaw: W.yaw, time: E.time, talking: false }, dt);
+        const lapT = t > OUT && t < tEnd; if (lapT) { const [lx, lz] = [P.x - S.x, P.z - S.z]; if (Math.hypot(lx, lz) < 9) { W.yaw = Math.atan2(lx, lz); W.g.rotation.y = W.yaw; if (Math.random() < dt * 20) E.puff(S.x + (Math.random() - 0.5) * 4, E.ground(S.x, S.z) + 0.6, S.z + (Math.random() - 0.5) * 4, 0xd8c8a0, 1, 2, 0.9, 0.7, 1); } }
+        W.arms[0].rotation.x = t > 3.6 && t < OUT + 0.4 ? -1.7 : -0.9;                     // the staff, pointing the way
+        const dizzy = sstep(tEnd - 1.5, tEnd - 0.5, t) * (1 - sstep(tEnd + 0.8, tEnd + 1.4, t)); W.g.rotation.z = Math.sin(t * 7) * 0.13 * dizzy;
+        const sip = sstep(tEnd + 1.4, tEnd + 2.0, t); W.arms[1].rotation.x = lerp(-0.5, -2.35, sip); W.head.rotation.x = -0.35 * sip;
+        if (once('sip', t, tEnd + 2.0)) { E.Sound.eat(); E.toast('THE WIZARD: …I shall be at the pub.', 2.6); }
+        // Camera: wide on the glade for the whoop and the pond; on the wizard as he points; high and wide for the lap and away;
+        // then in close on the wizard for the sip.
+        const gy = E.ground(S.x, S.z);
+        if (t < 3.6) { cam.position.set(14, gy + 8, GLADE.z + 4); cam.lookAt((P0.x + Q.x) / 2, 5, (P0.z + Q.z) / 2); }
+        else if (t < OUT) { cam.position.set(S.x + 5.5, gy + 3.4, S.z - 5); cam.lookAt(S.x - 1, gy + 2.4, S.z + 1); }
+        else if (t < tEnd + 0.6) { cam.position.set(S.x + 15, gy + 13, S.z + 9); cam.lookAt(lerp(S.x, P.x, 0.45), gy + 2, lerp(S.z, P.z, 0.45)); }
+        else { const fx = Math.sin(W.yaw), fz = Math.cos(W.yaw); cam.position.set(S.x + fx * 5.5 + fz * 1.5, gy + 3.2, S.z + fz * 5.5 - fx * 1.5); cam.lookAt(S.x, gy + 2.7, S.z); }
+      }, done() { wizCtl.held = false; E.complete(); } });
+    };
+    const exile = T => {
+      const W = Models.buildMiller({ staff: true }), staff = W.orb.parent, A = { x: 2, z: GLADE.z + 22 }, ux = A.x - T.x, uz = A.z - T.z, ul = Math.hypot(ux, uz);
+      const S = { x: T.x + ux / ul * 9.5, z: T.z + uz / ul * 9.5 }, sx = uz / ul, sz = -ux / ul, cam = E.camera, tip = new THREE.Vector3(), V = new THREE.Vector3();
+      const beam = E.mesh(new THREE.CylinderGeometry(0.22, 0.22, 1, 6).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.9 }), 0, 0, 0); beam.visible = false;
+      const glow = E.light(A.x, E.ground(A.x, A.z) + 4, A.z, 0xffe9a0, 0, 34);
+      E.world.g.add(W.g); W.g.visible = false; W.yaw = Math.atan2(T.x - A.x, T.z - A.z);
+      const cues = {}, once = (k, t, at) => { if (!cues[k] && t >= at) { cues[k] = true; return true; } return false; };
+      const mid = { x: (S.x + T.x) / 2, z: (S.z + T.z) / 2 };
+      E.toast('ENTER skips', 2);
+      E.cutscene({ dur: 9, step(t, dt) {
+        if (once('growl', t, 0.1)) E.toast('TILE TROLL: Grrk… my grout… my lovely grout…', 2.4);
+        // He steps out of the light at the glade's mouth, and comes on.
+        if (once('appear', t, 1.0)) { W.g.visible = true; E.flash('#fff6d0', 600); E.Sound.ring(); E.puff(A.x, E.ground(A.x, A.z) + 2.5, A.z, 0xffe9a0, 30, 7, 0.9, 0.9, 3); }
+        if (once('speak', t, 2.6)) E.toast('THE WIZARD: Back to the cracks you crawled from, square fiend!', 3);
+        const k = sstep(1.3, 4.0, t), wx = lerp(A.x, S.x, k), wz = lerp(A.z, S.z, k), wy = E.ground(wx, wz);
+        W.g.position.set(wx, wy + (k > 0 && k < 1 ? Math.abs(Math.sin(t * 7)) * 0.12 : 0), wz);
+        Models.animNpc(W, { yaw: W.yaw, time: E.time, talking: t > 2.6 && t < 5 }, dt);
+        // The staff goes up, its light grows, and a bolt takes him.
+        const up = sstep(4.0, 4.9, t) * (1 - sstep(6.6, 7.6, t));
+        W.arms[0].rotation.x = lerp(-0.9, -2.7, up); staff.position.y = 1.3 * up; staff.rotation.x = -0.25 * up;
+        W.orb.scale.setScalar(1 + up * 2.2 + Math.sin(t * 20) * 0.2 * up); W.orb.getWorldPosition(tip);
+        glow.position.copy(tip); glow.intensity = (t > 1 ? 40 * (1 - sstep(1.0, 2.2, t)) : 0) + 90 * up;
+        if (t > 4.9 && t < 5.9 && T.state !== 'gone') { beam.visible = true; V.set(T.x, T.y + 3.4, T.z); beam.position.copy(tip).lerp(V, 0.5); beam.scale.set(1 + Math.sin(t * 40) * 0.3, 1 + Math.sin(t * 40) * 0.3, tip.distanceTo(V)); beam.lookAt(V); }
+        else beam.visible = false;
+        if (once('zap', t, 4.9)) { E.Sound.bolt(); E.Sound.charge(); }
+        if (once('gone', t, 5.6)) { E.flash('#fff', 1100); E.Sound.thud(); T.state = 'gone'; E.puff(T.x, T.y + 3, T.z, 0xffe9a0, 36, 12, 1.2, 1.2, 5); E.puff(T.x, T.y + 2, T.z, 0xf4f6f8, 16, 9, 0.6, 0.8, 3, 12); }
+        // Camera: on the troll as he reels; from beside him, looking out to where the wizard appears; then wide, side-on, for the
+        // wizard, the hog and the troll together (the picture on page 8) and the bolt.
+        if (t < 1.0) { cam.position.set(T.x + sx * 8 + ux / ul * 5, T.y + 4, T.z + sz * 8 + uz / ul * 5); cam.lookAt(T.x, T.y + 3.2, T.z); }
+        else if (t < 2.6) { cam.position.set(T.x + ux / ul * 3 + sx * 7, T.y + 4.5, T.z + uz / ul * 3 + sz * 7); cam.lookAt(A.x, E.ground(A.x, A.z) + 2.5, A.z); }
+        else { cam.position.set(mid.x + sx * 17, T.y + 6.5, mid.z + sz * 17); cam.lookAt(mid.x, T.y + 2.8, mid.z); }
+      }, done() {
+        beam.visible = false; glow.intensity = 0; W.arms[0].rotation.x = -0.9; staff.position.y = 0; staff.rotation.x = 0; W.orb.scale.setScalar(1);
+        if (T.state !== 'gone') { T.state = 'gone'; E.puff(T.x, T.y + 3, T.z, 0xffe9a0, 30, 12, 1.2, 1.2, 5); }
+        W.g.position.set(S.x, E.ground(S.x, S.z), S.z); W.g.visible = true;
+        E.actor({ step() {}, draw(dt) { if (!wizCtl.held) Models.animNpc(W, { yaw: Math.atan2(E.P.x - S.x, E.P.z - S.z), time: E.time, talking: E.state === 'dialog' }, dt); } });
+        E.music('trail'); E.GOL.cower = false;
+        E.pages([8], () => E.say([['wizard', 'The Wizard', 'Exile! Staff blazing, pint untouched. Onward, hog-rider — the cold mountain will not climb itself.'], ['gollum', 'The Gollum Man', 'It is gone! The square-man is gone! We wept. We is not ashamed.']], () => E.relic([T.x, T.y + 3, T.z], () => rideOff(W, S))));
+      } });
+    };
     E.trigger(-5, GLADE.z - 1, 20, () => E.pages([7], () => { troll.wake(); E.music('boss'); E.GOL.cower = true; E.objective('Fell the Tile Troll  ●●●', null); E.bark('troll', 'TILE TROLL: Who disturbs my supper? I shall GROUT you where you stand! (Charge him — and mind the tiles.)', 6); }));
   },
   // The opening: they ride up the road and in at the south gate, the townsfolk turning to watch; then page 4 (which is this

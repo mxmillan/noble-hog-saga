@@ -5,7 +5,7 @@
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=6';
-import { LEVELS } from './saga-levels.js?v=7';
+import { LEVELS } from './saga-levels.js?v=11';
 import * as Progress from './hog-progress.js?v=2';
 import { makePlayer } from './hog-music.js?v=1';
 const MAIN = LEVELS.filter(l => !l.side).length;       // the book's chapters come first in LEVELS; the side roads follow
@@ -628,7 +628,7 @@ function spawnTroll(o) {
       const hit = (P.x - tl.x) ** 2 + (P.z - tl.z) ** 2 < 2.6 && Math.abs(P.y + 1.5 - tl.y) < 2;
       if (tl.life <= 0 || hit) { tl.life = 0; tl.m.visible = false; puff(tl.x, tl.y, tl.z, 0xf4f6f8, 8, 5, 0.3, 0.4, 2, 10); if (hit && P.charge <= 0) hurt(1, tl.vx, tl.vz); else if (hit) Sound.stomp(); }
     }
-    if (T.state === 'sleep' || T.state === 'dead' || T.state === 'gone') return;
+    if (T.state === 'sleep' || T.state === 'dead' || T.state === 'gone' || T.state === 'stagger') return;
     const dx = P.x - T.x, dz = P.z - T.z, d = Math.hypot(dx, dz) || 0.001, alive = P.dead <= 0;
     if (alive) T.yaw = Math.atan2(dx, dz);
     if (T.state === 'idle') {
@@ -654,14 +654,15 @@ function spawnTroll(o) {
         T.hp--; T.inv = 1.3; T.held.visible = false; Sound.stomp(); Sound.thud(); cam.shake = 0.4; puff(T.x, T.y + 4, T.z, 0xffffff, 10, 7, 0.6, 0.4, 2); T.x -= dx / d * 1.6; T.z -= dz / d * 1.6;
         if (stomp) { P.vy = 15; P.canBoost = true; } else { P.charge = 0; P.vx = dx / d * 9; P.vz = dz / d * 9; P.vy = 8; P.grounded = false; }
         if (o.onHit) o.onHit(T);
-        if (T.hp <= 0) { T.state = 'dead'; if (o.onDefeat) o.onDefeat(T); } else { T.state = 'windup'; T.t = 0.8; }
+        // o.stagger: the last blow leaves him reeling on his feet rather than felled, for someone else to finish (chapter 1's wizard)
+        if (T.hp <= 0) { T.state = o.stagger ? 'stagger' : 'dead'; if (o.onDefeat) o.onDefeat(T); } else { T.state = 'windup'; T.t = 0.8; }
       }
     }
   };
   T.draw = dt => {
-    const st = T.state === 'sleep' || T.state === 'dead' ? 'dead' : T.state === 'hoist' ? 'windup' : T.state === 'gone' ? 'dead' : T.state;
+    const st = T.state === 'sleep' || T.state === 'dead' ? 'dead' : T.state === 'hoist' ? 'windup' : T.state === 'gone' ? 'dead' : T.state === 'stagger' ? 'recover' : T.state;
     Models.animTroll(T.m, { state: st, walking: T.walking && T.state === 'idle', time, yaw: T.yaw }, dt);
-    T.m.g.position.set(T.x, T.y, T.z); blink(T.m, T.state === 'dead' ? 0 : T.inv); T.shadow.position.set(T.x, T.y + 0.07, T.z);
+    T.m.g.position.set(T.x, T.y, T.z); T.m.g.rotation.z = T.state === 'stagger' ? Math.sin(time * 3.2) * 0.12 : 0; blink(T.m, T.state === 'dead' || T.state === 'stagger' ? 0 : T.inv); T.shadow.position.set(T.x, T.y + 0.07, T.z);
     if (T.state === 'gone') { T.m.g.visible = false; T.shadow.visible = false; }
   };
   T.y = terrainH(T.x, T.z);
