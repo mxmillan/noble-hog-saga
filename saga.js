@@ -5,7 +5,7 @@
 // No build step: three.js is the vendored copy in vendor/, wired up by the import map in index.html.
 import * as THREE from 'three';
 import * as Models from './hog3d-models.js?v=6';
-import { LEVELS } from './saga-levels.js?v=6';
+import { LEVELS } from './saga-levels.js?v=7';
 import * as Progress from './hog-progress.js?v=2';
 import { makePlayer } from './hog-music.js?v=1';
 const MAIN = LEVELS.filter(l => !l.side).length;       // the book's chapters come first in LEVELS; the side roads follow

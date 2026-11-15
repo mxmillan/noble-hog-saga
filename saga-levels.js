@@ -75,15 +75,19 @@ const FORDS = [[196, 210], [300, 332]], BANK1 = [366, 369, 375, 378], BANK1_H = 
 const wet1 = s => FORDS.reduce((w, [p, q]) => Math.max(w, sstep(p, p + 4, s) * sstep(q, q - 4, s)), 0);
 const bank1 = s => BANK1_H * sstep(BANK1[0], BANK1[1], s) * sstep(BANK1[3], BANK1[2], s);
 const half1 = s => lerp(22, 7, sstep(64, 78, s));
+// The town's south gate, and the road outside it that the trio ride in along (the opening scene; page 4).
+const GATE1 = 16, ROAD1 = 56;
 const L1 = {
-  chapter: 'Chapter the First', title: 'The Darkling Trail', music: 'town', bounds: [-72, 78, -498, 34], start: [0, -6, 0, -1], ambience: DAY,
+  chapter: 'Chapter the First', title: 'The Darkling Trail', music: 'town', bounds: [-72, 78, -498, 64], start: [0, -6, 0, -1], ambience: DAY,
   height(x, z) {
+    if (z > GATE1) return 6.5 + edge(Math.max(Math.abs(x) - 7, z - ROAD1), 'wall', x, z, 15);       // the road in, outside the south gate
     const t = T1.locate(x, z);
     let h = 6.5 - 3.4 * wet1(t.s) + bank1(t.s) + edge(Math.abs(t.d) - half1(t.s), 'wall', x, z, t.s < 70 ? 15 : 22);
     h = Math.min(h, 6.5 + 22 * sstep(GLADE.r, GLADE.r + 9, Math.hypot(x - GLADE.x, z - GLADE.z)));
     return lerp(h, 3.4, sstep(POND.r, POND.r - 3.5, Math.hypot(x - POND.x, z - POND.z)));
   },
   tint(c, x, z, h, ny) {
+    if (z > GATE1) { c.set(ny < 0.74 ? 0x8a8478 : Math.abs(x) < 3.5 ? 0x9a958c : 0x7fae4a); return; }
     const t = T1.locate(x, z), a = Math.abs(t.d), town = t.s < 72;
     if (h < 5.4) c.set(0x6b6a55); else if (bank1(t.s) > 0.3 && a < 9) c.set(ny < 0.74 ? 0x24301c : 0x3a4a26); else if (ny < 0.74) c.set(town ? 0x8a8478 : 0x3a3326);
     else if (town) c.set(a < 7 ? 0x9a958c : 0x7fae4a);
@@ -103,6 +107,18 @@ const L1 = {
       const [x, z] = at(74, sd * 9.5); E.mesh(new THREE.CylinderGeometry(3.2, 3.6, 17, 10), E.lam(0xffffff, E.rep(M.tex.wall, 3, 2)), x, 14, z); E.mesh(new THREE.ConeGeometry(4, 5.5, 10), E.lam(0xd06a50, E.rep(M.tex.tiles, 6, 2)), x, 25.2, z); E.addCyl(x, z, 3.7, 3.7, -5, 40, false);
     }
     E.mesh(new THREE.BoxGeometry(13, 3, 3), E.lam(0xffffff, E.rep(M.tex.wall, 2, 0.5)), 0, 19, -74);
+    // The south gate they ride in by, and a wall running from it into the banks either side.
+    for (const sx of [-1, 1]) {
+      E.mesh(new THREE.CylinderGeometry(3.2, 3.6, 17, 10), E.lam(0xffffff, E.rep(M.tex.wall, 3, 2)), sx * 9.5, 14, GATE1); E.mesh(new THREE.ConeGeometry(4, 5.5, 10), E.lam(0xd06a50, E.rep(M.tex.tiles, 6, 2)), sx * 9.5, 25.2, GATE1); E.addCyl(sx * 9.5, GATE1, 3.7, 3.7, -5, 40, false);
+      E.mesh(new THREE.BoxGeometry(18, 12, 2.4), E.lam(0xffffff, E.rep(M.tex.wall, 5, 2)), sx * 21.6, 11.5, GATE1); E.addBox(sx > 0 ? 12.6 : -31, sx > 0 ? 31 : -12.6, GATE1 - 1.2, GATE1 + 1.2, -5, 40, false);
+    }
+    E.mesh(new THREE.BoxGeometry(13, 3, 3), E.lam(0xffffff, E.rep(M.tex.wall, 2, 0.5)), 0, 19, GATE1);
+    for (const sx of [-1, 1]) for (let z = GATE1 + 6; z < ROAD1; z += 8) { const m = Models.buildPine(false, r); m.scale.setScalar(0.9 + r() * 0.4); E.put(m, sx * (9.5 + r() * 2), z + r() * 3, r() * 6, 0.3); }
+    // Townsfolk, who stop to watch the trio come in.
+    L1.folk = [[-9, 3, { coat: ['#8a3a2a', '#6a2a1e', '#a04a36'], apron: 0xe8e0c8 }], [8.5, -1, { coat: ['#3a5a7a', '#2c4660', '#4a6c8e'], bald: true }], [-8, -17, { coat: ['#5a7a3a', '#4a6830', '#6c8c48'], hair: '#8a5a2a', beard: '#5a3a1a' }]].map(([x, z, look]) => {
+      const m = Models.buildFolk(look); E.put(m.g, x, z, 0, 0); E.addCyl(x, z, 0.8, 0.8, -5, 40, false); m.yaw = Math.atan2(-x, -z); return { m, x, z, wave: 0 };
+    });
+    E.actor({ step() {}, draw(dt) { for (const f of L1.folk) { const near = Math.hypot(E.P.x - f.x, E.P.z - f.z) < 30; Models.animFolk(f.m, { yaw: near ? Math.atan2(E.P.x - f.x, E.P.z - f.z) : f.m.yaw, time: E.time, walk: false, pose: f.wave > 0 ? 'shout' : 'idle' }, dt); f.wave = Math.max(0, f.wave - dt); } } });
     const wiz = Models.buildMiller({ staff: true }), [wx, wz] = at(40, 5);
     L1.wizard = E.npc({ m: wiz, spr: 'wizard', name: 'The Wizard', x: wx, z: wz, yaw: -1.2, lines: [
       ['The cold mountain, I said. Through the wood, past the pond, and up. Do keep the small one on his leash.'],
@@ -149,7 +165,32 @@ const L1 = {
       }) });
     E.trigger(-5, GLADE.z - 1, 20, () => E.pages([7], () => { troll.wake(); E.music('boss'); E.GOL.cower = true; E.objective('Fell the Tile Troll  ●●●', null); E.bark('troll', 'TILE TROLL: Who disturbs my supper? I shall GROUT you where you stand! (Charge him — and mind the tiles.)', 6); }));
   },
-  begin(E) { E.gollum(true); E.pages([4], () => E.objective('Seek the wizard in the town', [L1.wizard.x, L1.wizard.z])); },
+  // The opening: they ride up the road and in at the south gate, the townsfolk turning to watch; then page 4 (which is this
+  // very moment in the book) and the camera settles behind the hog where play begins. ENTER skips.
+  begin(E) {
+    E.gollum(true);
+    const { P, GOL: G, cam } = E, [sx, sz] = L1.start, from = ROAD1 - 4, cs = E.camera, V = (x, y, z) => new E.THREE.Vector3(x, y, z), a = V(0, 0, 0), b = V(0, 0, 0);
+    const play = V(sx, E.ground(sx, sz) + 2.4 + Math.sin(0.34) * 15, sz + Math.cos(0.34) * 15);           // where the game's own camera will be
+    let waved = 0;
+    E.toast('ENTER skips', 2.5);
+    E.cutscene({ dur: 9.6, step(t, dt, c) {
+      const k = sstep(0.4, 7.4, t), z = lerp(from, sz, k), y = E.ground(sx, z);
+      P.x = sx + Math.sin(k * 9) * 0.4 * (1 - k); P.z = z; P.y = y; P.dirX = 0; P.dirZ = -1; c.run = k > 0.01 && k < 0.99;
+      G.x = P.x + 1.5; G.z = z + 3.6; G.y = E.ground(G.x, G.z); G.hx = 0; G.hz = -1; G.frame = c.run ? 'gol_crawl' : 'gol_idle';
+      for (const f of L1.folk) if (!f.seen && Math.hypot(P.x - f.x, P.z - f.z) < 14) { f.seen = true; f.wave = 1.6; if (waved++ === 0) E.Sound.check(); }
+      // Camera: low on the road behind them, looking up the road through the gate; then inside, by the well-side houses, as
+      // they come through and up the street; then round behind the hog to where play begins.
+      if (t < 3.6) { a.set(P.x + 3.5, y + 3.2, z + 11); cs.position.copy(a); cs.lookAt(0, 9, GATE1 - 8); }
+      else {
+        b.set(-7.5, E.ground(-7.5, -14) + 6.5, -14); cs.position.copy(b.lerp(play, sstep(7.4, 9.4, t)));
+        const lk = sstep(7.4, 9.4, t); cs.lookAt(P.x, P.y + 2 + lk * 0.4, P.z - lk * 0.01);
+      }
+    }, done() {
+      P.x = sx; P.z = sz; P.y = E.ground(sx, sz); P.dirX = 0; P.dirZ = -1; cam.yaw = 0; cam.pitch = 0.34; cam.dist = cam.cur = 15; cam.tgt.set(P.x, P.y + 2.4, P.z);
+      G.x = P.x + 1.5; G.z = P.z + 3.6;
+      E.pages([4], () => { E.objective('Seek the wizard in the town', [L1.wizard.x, L1.wizard.z]); E.bark('gollum', 'THE GOLLUM MAN: A town. It smells of pies, and people. We hates people. We likes pies.', 4.5); });
+    } });
+  },
 };
 
 // ═════════════════════════════ Chapter the Second: The Cold Mountain ═════════════════════════════
@@ -842,4 +883,4 @@ const LK = {
 // The book's four chapters first (saga.js counts on that), then the side roads, in the order of SIDES in hog-progress.js.
 export const LEVELS = [L1, L2, L3, L4, LF, LM, LV, LK];
 // For test bots and the console: the geometry the chapters are built on.
-export const GEO = { T1, T2, T3, T4, GLADE, POND, FORDS, BANK1, GAPS2, LEDGE2, EDGE2, END2, GATE2, DOOR3, TAV, COR, THR, ESC, K, S4, RIVER4, spiral, TF, RAFT, ROCKSF, BEAMSF, MB, TV, CHIPSV, LOWV, POOLV, CLIMBV, MK, ROUTEK, AMB: { DAY, DUSK, SNOW, NIGHT, TAVERN, CAVE, BRIGHT, FROST, SUNSET } };
+export const GEO = { GATE1, ROAD1, T1, T2, T3, T4, GLADE, POND, FORDS, BANK1, GAPS2, LEDGE2, EDGE2, END2, GATE2, DOOR3, TAV, COR, THR, ESC, K, S4, RIVER4, spiral, TF, RAFT, ROCKSF, BEAMSF, MB, TV, CHIPSV, LOWV, POOLV, CLIMBV, MK, ROUTEK, AMB: { DAY, DUSK, SNOW, NIGHT, TAVERN, CAVE, BRIGHT, FROST, SUNSET } };
