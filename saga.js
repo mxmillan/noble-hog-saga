@@ -843,7 +843,15 @@ function updateCamera(dt, follow = true) {
   if (follow) {
     if (input.camX || input.camY) cam.manualT = 1.6; else cam.manualT -= dt;
     cam.yaw += input.camX * 2.3 * dt; cam.pitch = clamp(cam.pitch + input.camY * 1.3 * dt, 0.06, 1.3);
-    if (cam.manualT <= 0 && state === 'play' && P.charge <= 0) cam.yaw -= input.x * 0.85 * dt;
+    // Swing round behind him as he rides: the default, at the user's asking. Steering is relative to the camera, so this is
+    // also what turns him when the player holds left or right: the swing is capped so he arcs rather than spins. Not while
+    // he rides toward the camera (it would chase its own tail), not while he stands still, and not for a moment after the
+    // player has turned the camera by hand.
+    if (cam.manualT <= 0 && state === 'play' && P.dead <= 0) {
+      const sp = Math.hypot(P.vx, P.vz), along = -P.dirX * Math.sin(cam.yaw) - P.dirZ * Math.cos(cam.yaw);     // 1: riding away from the camera, -1: toward it
+      const turn = clamp(wrap(Math.atan2(-P.dirX, -P.dirZ) - cam.yaw) * 1.6, -1.6, 1.6);                     // radians a second
+      if (sp > 2) cam.yaw += turn * Math.min(1, sp / 11.5) * sstep(-0.5, -0.1, along) * dt;
+    }
     const k = 1 - Math.exp(-12 * dt), ky = 1 - Math.exp(-(P.grounded ? 9 : 5) * dt);
     cam.tgt.x = lerp(cam.tgt.x, P.x, k); cam.tgt.z = lerp(cam.tgt.z, P.z, k); cam.tgt.y = lerp(cam.tgt.y, P.y + 2.4, ky);
   }

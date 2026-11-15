@@ -356,6 +356,17 @@ work like Mario 64's castle). `HUB` (the `?hub` query) switches `hog3d.js` from 
 - **Testing:** set `localStorage['hogSaga.progress']` by hand, then open `hog3d.html?hub&from=n`.
   `HOG.DOORS`, `HOG.prog` are exposed. `SAGA.E.complete()` finishes the current chapter.
 
+### Camera
+
+The user asked for the camera to track behind the hog by default. `updateCamera` (the same code in
+`saga.js` and `hog3d.js`) swings the camera round behind his facing whenever he rides, at up to
+1.6 radians a second. Steering is relative to the camera, so this is also what turns him when
+left or right is held: he arcs round with the camera following. It does nothing while he rides
+toward the camera (it would chase its own tail), while he stands still, or for 1.6 s (2.5 s after
+a mouse drag) after the player turns the camera by hand. When testing it, measure the change in
+`cam.yaw`, not the gap between camera and hog: while a sideways key is held they turn together
+and the gap stays at 90°.
+
 ### The man in the tower (chapter 2)
 
 The user asked that the Gollum Man be covered in muck before the hog can go on. A wall and
